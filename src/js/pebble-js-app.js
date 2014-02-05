@@ -2,10 +2,8 @@ var Tokens = [];
 
 Pebble.addEventListener("ready",
     function(e) {
-        console.log("Hello world! - Sent from your javascript application.");
-        Pebble.sendAppMessage( { "utcoffset_set": (new Date()).getTimezoneOffset() * -60});
-        //setTimeout(function(){Pebble.sendAppMessage( { "AMClearCredentials": 0, "AMCreateCredential": "test 123", "AMCreateCredential_ID": 1, "AMCreateCredential_Name": "hey-o"});}, 3000);
-        setTimeout(function(){Pebble.sendAppMessage( { "AMReadCredentialList": 1});}, 100);
+        QueueAppMessage({ "utcoffset_set": (new Date()).getTimezoneOffset() * -60});
+        QueueAppMessage({ "AMReadCredentialList": 1});
     }
 );
 
@@ -18,29 +16,48 @@ var unCString = function(array, offset) {
     return string;
 };
 
-Pebble.addEventListener("appmessage",
-  function(e) {
-    console.log("Received message: " + e.payload);
-    if (e.payload.AMReadCredentialList_Result) {
-        var token = {};
-        token.ID = e.payload.AMReadCredentialList_Result[0];
-        token.Name = unCString(e.payload.AMReadCredentialList_Result, 2);
-        console.log(token.Name);
-        Tokens.push(token);
-        console.log(JSON.stringify(token));
-    }
-  }
-);
-
-Pebble.addEventListener("showConfiguration", function() {
-    Pebble.openURL("http://10.0.126.222:8080/config/config.html#" + encodeURIComponent(JSON.stringify(Tokens)));
-});
-
 var TokenByID = function(id) {
     for (var idx in Tokens) {
         if (Tokens[idx].ID == id) return Tokens[idx];
     }
 };
+
+var AMQueue = [];
+var AMPending = false;
+var QueueAppMessage = function(message) {
+    AMQueue.push(message);
+    if (!AMPending) AMTransmitQueue();
+};
+
+var AMQueueFail = function(txn) {
+    console.log("AM transmit failed: " + txn.error.message + ", continuing");
+    AMTransmitQueue();
+};
+
+var AMTransmitQueue = function() {
+    if (!AMQueue.length) {
+        AMPending = false;
+        return;
+    }
+    AMPending = true;
+    var message = AMQueue.shift();
+    Pebble.sendAppMessage(message, AMTransmitQueue, AMQueueFail);
+};
+
+Pebble.addEventListener("appmessage",
+  function(e) {
+    if (e.payload.AMReadCredentialList_Result) {
+        var token = {};
+        token.ID = e.payload.AMReadCredentialList_Result[0];
+        token.Name = unCString(e.payload.AMReadCredentialList_Result, 2);
+        Tokens.push(token);
+    }
+  }
+);
+
+Pebble.addEventListener("showConfiguration", function() {
+    Pebble.openURL("http://collins-macbook-pro-2.local:8080/config/config.html#" + encodeURIComponent(JSON.stringify(Tokens)));
+});
 
 var ReconcileConfiguration = function(newTokens) {
     var existing_ids = [];
@@ -71,19 +88,21 @@ var ReconcileConfiguration = function(newTokens) {
     console.log("Creating " + JSON.stringify(to_create));
     console.log("Updating " + JSON.stringify(to_update));
     console.log("Deleting " + JSON.stringify(to_delete_ids));
+
     // Apply updates
     for(idx in to_delete_ids) {
-        Pebble.sendAppMessage( { "AMDeleteCredential": [to_delete_ids[idx]]});
+        QueueAppMessage({"AMDeleteCredential": [to_delete_ids[idx]]});
     }
     for (idx in to_create) {
         token = to_create[idx];
-        Pebble.sendAppMessage({"AMCreateCredential": token.Secret, "AMCreateCredential_ID": token.ID, "AMCreateCredential_Name": token.Name});
+        QueueAppMessage({"AMCreateCredential": token.Secret, "AMCreateCredential_ID": token.ID, "AMCreateCredential_Name": token.Name});
+        token.Secret = "";
     }
     for (idx in to_update) {
         token = to_update[idx];
-        Pebble.sendAppMessage({"AMUpdateCredential": [token.ID, 0, token.Name, 0]});
+        QueueAppMessage({"AMUpdateCredential": [token.ID, 0, token.Name, 0]});
     }
-    Pebble.sendAppMessage({"AMSetCredentialListOrder": new_ids});
+    QueueAppMessage({"AMSetCredentialListOrder": new_ids});
     Tokens = newTokens;
 };
 
