@@ -2,8 +2,8 @@ var Tokens = [];
 
 Pebble.addEventListener("ready",
     function(e) {
-        QueueAppMessage({ "utcoffset_set": (new Date()).getTimezoneOffset() * -60});
-        QueueAppMessage({ "AMReadCredentialList": 1});
+        QueueAppMessage({ "AMSetUTCOffset": (new Date()).getTimezoneOffset() * -60});
+        QueueAppMessage({ "AMReadTokenList": 1});
     }
 );
 
@@ -17,7 +17,7 @@ var UnCString = function(array, offset) {
 };
 
 var ToByteArray = function(input) {
-    // Otherwise the JS appmessage framework will mandle these characters on transmission.
+    // Otherwise the JS appmessage framework will mangle these characters on transmission.
     return input.split('').map(function(e){return e.charCodeAt(0);});
 };
 
@@ -51,10 +51,10 @@ var AMTransmitQueue = function() {
 
 Pebble.addEventListener("appmessage",
   function(e) {
-    if (e.payload.AMReadCredentialList_Result) {
+    if (e.payload.AMReadTokenList_Result) {
         var token = {};
-        token.ID = e.payload.AMReadCredentialList_Result[0];
-        token.Name = UnCString(e.payload.AMReadCredentialList_Result, 2);
+        token.ID = e.payload.AMReadTokenList_Result[0];
+        token.Name = UnCString(e.payload.AMReadTokenList_Result, 2);
         Tokens.push(token);
     }
   }
@@ -96,17 +96,17 @@ var ReconcileConfiguration = function(newTokens) {
 
     // Apply updates
     for(idx in to_delete_ids) {
-        QueueAppMessage({"AMDeleteCredential": [to_delete_ids[idx]]});
+        QueueAppMessage({"AMDeleteToken": [to_delete_ids[idx]]});
     }
     for (idx in to_create) {
         token = to_create[idx];
-        QueueAppMessage({"AMCreateCredential": ToByteArray(atob(token.Secret)), "AMCreateCredential_ID": token.ID, "AMCreateCredential_Name": token.Name});
+        QueueAppMessage({"AMCreateToken": ToByteArray(atob(token.Secret)), "AMCreateToken_ID": token.ID, "AMCreateToken_Name": token.Name});
     }
     for (idx in to_update) {
         token = to_update[idx];
-        QueueAppMessage({"AMUpdateCredential": [token.ID, 0, token.Name, 0]});
+        QueueAppMessage({"AMUpdateToken": [token.ID, 0, token.Name, 0]});
     }
-    QueueAppMessage({"AMSetCredentialListOrder": new_ids});
+    QueueAppMessage({"AMSetTokenListOrder": new_ids});
     Tokens = newTokens.map(function(e){e.Secret = null; return e;}); // Strip out the secrets so they don't appear in further log messages.
 };
 

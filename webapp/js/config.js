@@ -54,7 +54,7 @@ $(document).ready(function(e) {
 
     $("#token-create-btn").bind("click", TokenCreated);
 
-    $("#new-token-secret").bind("keyup", function(e){
+    $("#new-token-key").bind("keyup", function(e){
         if (e.keyCode == 13) {
             TokenCreated();
         }
@@ -116,9 +116,9 @@ var TokenDeleted = function(){
 var TokenCreated = function(e){
     var raw_secret;
     try {
-        raw_secret = base32_decode($("#new-token-secret").val());
+        raw_secret = base32_decode($("#new-token-key").val());
     } catch (exc) {
-        alert("The secret could not be decoded - make sure it's typed correctly.");
+        alert("The key could not be decoded - make sure it's typed correctly.");
         return;
     }
     var base64_secret = btoa(raw_secret); // Annnd right back to base64 - so I don't need to write a JS base32 encoder too.
@@ -128,7 +128,7 @@ var TokenCreated = function(e){
         "Secret": base64_secret
     };
     if (!token.Name || !token.Secret) {
-        alert("You must enter a name and secret for the new token");
+        alert("You must enter a name and key for the new token");
         return;
     }
     Tokens.push(token);

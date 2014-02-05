@@ -15,83 +15,82 @@
 #include "generate.h"
 #include "unixtime.h"
 
-#define P_UTCOFFSET   1
-#define P_KEYCOUNT    2
-#define P_KEYSTART    10000
+#define P_UTCOFFSET       1
+#define P_TOKENS_COUNT    2
+#define P_TOKENS_START    10000
 
-#define MAX_NAME_LENGTH 32
+#define MAX_NAME_LENGTH   32
 
 Window *window;
 
 typedef enum AMKey {
-  AMUTCOffsetSet = 0, // Int32 with offset
+  AMSetUTCOffset = 0, // Int32 with offset
 
-  AMCreateCredential = 1, // Char array with secret
-  AMCreateCredential_ID = 2, // Int with ID for credential (provided by phone)
-  AMCreateCredential_Name = 3, // Char array with name for credential (provided by phone)
+  AMCreateToken = 1, // UInt8 array with secret
+  AMCreateToken_ID = 2, // Short with ID for token (provided by phone)
+  AMCreateToken_Name = 3, // Char array with name for token (provided by phone)
 
-  AMDeleteCredential = 4, // Short with credential ID
-  AMClearCredentials = 5,
+  AMDeleteToken = 4, // Short with token ID
+  AMClearTokens = 5,
 
-  AMReadCredentialList = 6, // Starts credential read
-  AMReadCredentialList_Result = 7, // Struct with credential info, returned in order of the list
+  AMReadTokenList = 6, // Starts token list read
+  AMReadTokenList_Result = 7, // Struct with token info, returned in order of the list
 
-  AMUpdateCredential = 8, // Struct with credential info
+  AMUpdateToken = 8, // Struct with token info
 
-  AMSetCredentialListOrder = 9 // array of shorts of credential IDs
+  AMSetTokenListOrder = 9 // array of shorts of token IDs
 } AMKey;
 
-typedef struct KeyInfo {
+typedef struct TokenInfo {
   char name[MAX_NAME_LENGTH + 1];
   short id;
   uint8_t secret[TOTP_SECRET_SIZE];
   char code[7];
-} KeyInfo;
+} TokenInfo;
 
-typedef struct PublicKeyInfo {
+typedef struct PublicTokenInfo {
   short id;
   char name[MAX_NAME_LENGTH + 1];
-} PublicKeyInfo;
+} PublicTokenInfo;
 
-typedef struct KeyListNode {
-  struct KeyListNode* next;
-  KeyInfo* key;
-} KeyListNode;
+typedef struct TokenListNode {
+  struct TokenListNode* next;
+  TokenInfo* key;
+} TokenListNode;
 
-KeyInfo keys[0];
-KeyListNode* keyList = NULL;
-bool keyListDirty = false;
-bool persistentStoreNeedsWriteback = false;
+TokenListNode* token_list = NULL;
+bool key_list_is_dirty = false;
+bool persistent_store_needs_writeback = false;
 
-Layer *barLayer;
+Layer *bar_layer;
 
-TextLayer *noTokensLayer;
+TextLayer *no_tokens_layer;
 
-MenuLayer *codeListLayer;
+MenuLayer *code_list_layer;
 
-int utcOffset;
+int utc_offset;
 
-int key_list_read_index = 0;
+int token_list_retrieve_index = 0;
 
-void key_list_add(KeyInfo* key) {
-  KeyListNode* node = malloc(sizeof(KeyListNode));
+void token_list_add(TokenInfo* key) {
+  TokenListNode* node = malloc(sizeof(TokenListNode));
   node->next = NULL;
   node->key = key;
 
-  if (!keyList) {
-    keyList = node;
+  if (!token_list) {
+    token_list = node;
   } else {
-    KeyListNode* tail = keyList;
+    TokenListNode* tail = token_list;
     while (tail->next != NULL) {
       tail = tail->next;
     }
     tail->next = node;
   }
-  keyListDirty = true;
+  key_list_is_dirty = true;
 }
 
-KeyInfo* key_by_list_index(int index) {
-  KeyListNode* node = keyList;
+TokenInfo* token_by_list_index(int index) {
+  TokenListNode* node = token_list;
   for (int i = 0; i < index; ++i)
   {
     node = node->next;
@@ -99,8 +98,8 @@ KeyInfo* key_by_list_index(int index) {
   return node->key;
 }
 
-KeyInfo* key_by_id(short id) {
-  KeyListNode* node = keyList;
+TokenInfo* token_by_id(short id) {
+  TokenListNode* node = token_list;
   while (node) {
     if (node->key->id == id) {
       return node->key;
@@ -110,9 +109,9 @@ KeyInfo* key_by_id(short id) {
   return NULL;
 }
 
-short key_list_length(void){
+short token_list_length(void){
   short size = 0;
-  KeyListNode* node = keyList;
+  TokenListNode* node = token_list;
   while (node) {
     node = node->next;
     size++;
@@ -120,20 +119,20 @@ short key_list_length(void){
   return size;
 }
 
-void key_list_clear(void){
-  KeyListNode* temp;
-  while (keyList) {
-    temp = keyList;
-    keyList = temp->next;
+void token_list_clear(void){
+  TokenListNode* temp;
+  while (token_list) {
+    temp = token_list;
+    token_list = temp->next;
     free(temp->key); // Since it'd be a pain to do this otherwise.
     free(temp);
   }
-  keyListDirty = true;
+  key_list_is_dirty = true;
 }
 
-bool key_list_delete(KeyInfo* key){
-  KeyListNode* node = keyList;
-  KeyListNode* last = NULL;
+bool token_list_delete(TokenInfo* key){
+  TokenListNode* node = token_list;
+  TokenListNode* last = NULL;
   while (node && node->key != key) {
     last = node;
     node = node->next;
@@ -142,209 +141,210 @@ bool key_list_delete(KeyInfo* key){
     if (last) {
       last->next = node->next;
     } else {
-      keyList = NULL;
+      token_list = NULL;
     }
     free(node);
-    keyListDirty = true;
+    key_list_is_dirty = true;
     return true;
   }
   return false;
 }
 
-void key_list_supplant(KeyListNode* newList) {
-  KeyListNode* last = NULL;
-  // Free the existing list nodes (but not their KeyInfos)
-  while (keyList) {
-    last = keyList;
-    keyList = last->next;
+void token_list_supplant(TokenListNode* newList) {
+  TokenListNode* last = NULL;
+  // Free the existing list nodes (but not their TokenInfos)
+  while (token_list) {
+    last = token_list;
+    token_list = last->next;
     free(last);
   }
-  keyList = newList;
-  keyListDirty = true;
+  token_list = newList;
+  key_list_is_dirty = true;
 }
 
-void keyinfo2publickeyinfo(KeyInfo* key, PublicKeyInfo* public) {
+void tokeninfo2publicinfo(TokenInfo* key, PublicTokenInfo* public) {
   public->id = key->id;
   strncpy(public->name, key->name, MAX_NAME_LENGTH);
   public->name[MAX_NAME_LENGTH] = 0;
 }
 
-void publickeyinfo2keyinfo(PublicKeyInfo* public, KeyInfo* key) {
+void publicinfo2tokeninfo(PublicTokenInfo* public, TokenInfo* key) {
   key->id = public->id;
   strncpy(key->name, public->name, MAX_NAME_LENGTH);
   key->name[MAX_NAME_LENGTH] = 0;
 }
 
 void code2char(unsigned int code, char* out) {
-  for(int x=0;x<6;x++) {
-    out[5-x] = '0'+(code % 10);
+  for(int x=0; x<6; x++) {
+    out[5-x] = '0' + (code % 10);
     code /= 10;
   }
 }
 
 void show_no_tokens_message(bool show) {
-  layer_set_hidden((Layer*)codeListLayer, show);
-  layer_set_hidden(barLayer, show);
-  layer_set_hidden((Layer*)noTokensLayer, !show);
+  layer_set_hidden((Layer*)code_list_layer, show);
+  layer_set_hidden(bar_layer, show);
+  layer_set_hidden((Layer*)no_tokens_layer, !show);
 }
 
 void refresh_all(void){
   static unsigned int lastQuantizedTimeGenerated = 0;
 
-  unsigned long utcTime = time(NULL) - utcOffset;
+  unsigned long utcTime = time(NULL) - utc_offset;
 
   unsigned int quantized_time = utcTime/30;
 
-  if (quantized_time == lastQuantizedTimeGenerated && !keyListDirty) {
+  if (quantized_time == lastQuantizedTimeGenerated && !key_list_is_dirty) {
     return;
   }
 
-  keyListDirty = false;
+  key_list_is_dirty = false;
 
   bool hasKeys = false;
 
   lastQuantizedTimeGenerated = quantized_time;
 
-  KeyListNode* keyNode = keyList;
+  TokenListNode* keyNode = token_list;
   while (keyNode) {
     unsigned int code = generateCode(keyNode->key->secret, quantized_time);
     code2char(code, (char*)&keyNode->key->code);
     keyNode = keyNode->next;
     hasKeys = true;
   }
+
   if (hasKeys) {
-    menu_layer_reload_data(codeListLayer);
+    menu_layer_reload_data(code_list_layer);
   }
   show_no_tokens_message(!hasKeys);
 }
 
 void bar_layer_update(Layer *l, GContext* ctx) {
   graphics_context_set_fill_color(ctx, GColorBlack);
-  unsigned short slice = 30-(time(NULL)%30);
-  graphics_fill_rect(ctx, GRect(0,0,(slice*48)/10,5), 0, GCornerNone);
+  unsigned short slice = 30 - (time(NULL) % 30);
+  graphics_fill_rect(ctx, GRect(0, 0, (slice * 48) / 10, 5), 0, GCornerNone);
 }
 
 void draw_code_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *callback_context){
   graphics_context_set_text_color(ctx, GColorBlack);
-  KeyInfo* key = key_by_list_index(cell_index->row);
+  TokenInfo* key = token_by_list_index(cell_index->row);
   graphics_draw_text(ctx, (char*)key->name, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(0, 36, 144, 20), GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
   graphics_draw_text(ctx, (char*)key->code, fonts_get_system_font(FONT_KEY_BITHAM_34_MEDIUM_NUMBERS), GRect(0, 0, 144, 100), GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
 }
 
 uint16_t num_code_rows(struct MenuLayer *menu_layer, uint16_t section_index, void *callback_context){
-  return key_list_length();
+  return token_list_length();
 }
 
 int16_t get_cell_height(struct MenuLayer *menu_layer, MenuIndex *cell_index, void *callback_context) {
   return 55;
 }
 
-void key_list_retrieve_iter(void) {
-  if (key_list_read_index == key_list_length()) return;
+void token_list_retrieve_iter(void) {
+  if (token_list_retrieve_index == token_list_length()) return;
 
-  KeyInfo* key = key_by_list_index(key_list_read_index);
-  PublicKeyInfo* public = malloc(sizeof(PublicKeyInfo));
+  TokenInfo* key = token_by_list_index(token_list_retrieve_index);
+  PublicTokenInfo* public = malloc(sizeof(PublicTokenInfo));
   DictionaryIterator *iter;
   app_message_outbox_begin(&iter);
 
-  keyinfo2publickeyinfo(key, public);
-  Tuplet record = TupletBytes(AMReadCredentialList_Result, (uint8_t*)public, sizeof(PublicKeyInfo));
+  tokeninfo2publicinfo(key, public);
+  Tuplet record = TupletBytes(AMReadTokenList_Result, (uint8_t*)public, sizeof(PublicTokenInfo));
   dict_write_tuplet(iter, &record);
   app_message_outbox_send();
 
-  key_list_read_index++;
+  token_list_retrieve_index++;
   free(public);
 }
 
 void in_received_handler(DictionaryIterator *received, void *context) {
   static bool delta = false;
-  Tuple *utcoffset_tuple = dict_find(received, AMUTCOffsetSet);
+  Tuple *utcoffset_tuple = dict_find(received, AMSetUTCOffset);
   if (utcoffset_tuple) {
-    delta = utcOffset != utcoffset_tuple->value->int32;
-    utcOffset = utcoffset_tuple->value->int32;
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Set TZ offset %d", utcOffset);
+    delta = utc_offset != utcoffset_tuple->value->int32;
+    utc_offset = utcoffset_tuple->value->int32;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Set TZ offset %d", utc_offset);
    }
 
-  if (dict_find(received, AMClearCredentials)) {
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Clear credentials");
-    key_list_clear();
+  if (dict_find(received, AMClearTokens)) {
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Clear tokens");
+    token_list_clear();
     delta = true;
   }
 
-  Tuple *delete_credential = dict_find(received, AMDeleteCredential);
-  if (delete_credential) {
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Delete credential %d", delete_credential->value->int8);
-    KeyInfo* key = key_by_id(delete_credential->value->int8);
-    key_list_delete(key);
+  Tuple *delete_token = dict_find(received, AMDeleteToken);
+  if (delete_token) {
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Delete token %d", delete_token->value->int8);
+    TokenInfo* key = token_by_id(delete_token->value->int8);
+    token_list_delete(key);
     free(key);
     delta = true;
   }
 
-  Tuple *update_credential = dict_find(received, AMUpdateCredential);
-  if (update_credential) {
-    PublicKeyInfo* public = (PublicKeyInfo*)&update_credential->value->data;
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Update credential %d - %s", public->id, public->name);
-    publickeyinfo2keyinfo(public, key_by_id(public->id));
+  Tuple *update_token = dict_find(received, AMUpdateToken);
+  if (update_token) {
+    PublicTokenInfo* public = (PublicTokenInfo*)&update_token->value->data;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Update token %d - %s", public->id, public->name);
+    publicinfo2tokeninfo(public, token_by_id(public->id));
     delta = true;
   }
 
-  Tuple *create_credential = dict_find(received, AMCreateCredential);
-  if (create_credential) {
-    uint8_t* secret = create_credential->value->data;
-    KeyInfo* newKey = malloc(sizeof(KeyInfo));
+  Tuple *create_token = dict_find(received, AMCreateToken);
+  if (create_token) {
+    uint8_t* secret = create_token->value->data;
+    TokenInfo* newKey = malloc(sizeof(TokenInfo));
     memcpy((char*)&newKey->secret, secret, TOTP_SECRET_SIZE);
-    newKey->id = dict_find(received, AMCreateCredential_ID)->value->int32;
-    strncpy((char*)&newKey->name, dict_find(received, AMCreateCredential_Name)->value->cstring, MAX_NAME_LENGTH);
+    newKey->id = dict_find(received, AMCreateToken_ID)->value->int32;
+    strncpy((char*)&newKey->name, dict_find(received, AMCreateToken_Name)->value->cstring, MAX_NAME_LENGTH);
     newKey->name[MAX_NAME_LENGTH] = 0;
 
-    key_list_add(newKey);
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Create credential %d - %s", newKey->id, newKey->name);
+    token_list_add(newKey);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Create token %d - %s", newKey->id, newKey->name);
     delta = true;
   }
 
-  if (dict_find(received, AMReadCredentialList)) {
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Listing credentials");
-    key_list_read_index = 0;
-    key_list_retrieve_iter();
+  if (dict_find(received, AMReadTokenList)) {
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Listing tokens");
+    token_list_retrieve_index = 0;
+    token_list_retrieve_iter();
   }
 
-  Tuple *reorder_list = dict_find(received, AMSetCredentialListOrder);
+  Tuple *reorder_list = dict_find(received, AMSetTokenListOrder);
   if (reorder_list) {
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Reordering credentials");
-    KeyListNode* newList = NULL;
-    KeyListNode* node = NULL;
-    KeyListNode* last = NULL;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Reordering tokens");
+    TokenListNode* newList = NULL;
+    TokenListNode* node = NULL;
+    TokenListNode* last = NULL;
 
-    // Build a new list using the existing KeyInfos
-    int ct = key_list_length();
+    // Build a new list using the existing TokenInfos
+    int ct = token_list_length();
     for (int i = 0; i < ct; ++i)
     {
-      node = malloc(sizeof(KeyListNode));
+      node = malloc(sizeof(TokenListNode));
       if (last) {
         last->next = node;
       } else {
         newList = node;
       }
       node->next = NULL;
-      node->key = key_by_id(reorder_list->value->data[i]);
+      node->key = token_by_id(reorder_list->value->data[i]);
       last = node;
     }
 
     // Free the existing list and replace.
-    key_list_supplant(newList);
+    token_list_supplant(newList);
 
     delta = true;
   }
 
-  persistentStoreNeedsWriteback = persistentStoreNeedsWriteback || delta;
+  persistent_store_needs_writeback = persistent_store_needs_writeback || delta;
   if (delta){
     refresh_all();
   }
 }
 
 void out_sent_handler(DictionaryIterator *sent, void *context) {
-  if (dict_find(sent, AMReadCredentialList_Result)) {
-    key_list_retrieve_iter();
+  if (dict_find(sent, AMReadTokenList_Result)) {
+    token_list_retrieve_iter();
   }
 }
 
@@ -360,14 +360,14 @@ void handle_init() {
   app_message_open(inbound_size, outbound_size);
 
   // Load persisted data
-  utcOffset = persist_exists(P_UTCOFFSET) ? persist_read_int(P_UTCOFFSET) : 0;
-  if (persist_exists(P_KEYCOUNT)) {
-    int ct = persist_read_int(P_KEYCOUNT);
-    APP_LOG(APP_LOG_LEVEL_INFO, "Starting with %d keys", ct);
+  utc_offset = persist_exists(P_UTCOFFSET) ? persist_read_int(P_UTCOFFSET) : 0;
+  if (persist_exists(P_TOKENS_COUNT)) {
+    int ct = persist_read_int(P_TOKENS_COUNT);
+    APP_LOG(APP_LOG_LEVEL_INFO, "Starting with %d tokens", ct);
     for (int i = 0; i < ct; ++i) {
-      KeyInfo* key = malloc(sizeof(KeyInfo));
-      persist_read_data(P_KEYSTART + i, key, sizeof(KeyInfo));
-      key_list_add(key);
+      TokenInfo* key = malloc(sizeof(TokenInfo));
+      persist_read_data(P_TOKENS_START + i, key, sizeof(TokenInfo));
+      token_list_add(key);
     }
   }
 
@@ -376,59 +376,59 @@ void handle_init() {
 
   Layer* rootLayer = window_get_root_layer(window);
   GRect rootLayerRect = layer_get_bounds(rootLayer);
-  barLayer = layer_create(GRect(0,rootLayerRect.size.h-5,rootLayerRect.size.w,5));
-  layer_set_update_proc(barLayer, bar_layer_update);
-  layer_add_child(rootLayer, barLayer);
+  bar_layer = layer_create(GRect(0,rootLayerRect.size.h-5,rootLayerRect.size.w,5));
+  layer_set_update_proc(bar_layer, bar_layer_update);
+  layer_add_child(rootLayer, bar_layer);
 
-  noTokensLayer = text_layer_create(GRect(0, rootLayerRect.size.h/2-35, rootLayerRect.size.w, 30*2));
-  text_layer_set_text(noTokensLayer, "No Tokens");
-  text_layer_set_font(noTokensLayer, fonts_get_system_font(FONT_KEY_BITHAM_30_BLACK));
-  text_layer_set_text_color(noTokensLayer, GColorBlack);
-  text_layer_set_text_alignment(noTokensLayer, GTextAlignmentCenter);
-  layer_add_child(rootLayer, (Layer*)noTokensLayer);
+  no_tokens_layer = text_layer_create(GRect(0, rootLayerRect.size.h/2-35, rootLayerRect.size.w, 30*2));
+  text_layer_set_text(no_tokens_layer, "No Tokens");
+  text_layer_set_font(no_tokens_layer, fonts_get_system_font(FONT_KEY_BITHAM_30_BLACK));
+  text_layer_set_text_color(no_tokens_layer, GColorBlack);
+  text_layer_set_text_alignment(no_tokens_layer, GTextAlignmentCenter);
+  layer_add_child(rootLayer, (Layer*)no_tokens_layer);
 
-  codeListLayer = menu_layer_create(GRect(0,0,rootLayerRect.size.w, rootLayerRect.size.h - 4));
+  code_list_layer = menu_layer_create(GRect(0,0,rootLayerRect.size.w, rootLayerRect.size.h - 4));
 
   MenuLayerCallbacks menuCallbacks = {
     .draw_row = draw_code_row,
     .get_num_rows = num_code_rows,
     .get_cell_height = get_cell_height
   };
-  menu_layer_set_callbacks(codeListLayer, NULL, menuCallbacks);
+  menu_layer_set_callbacks(code_list_layer, NULL, menuCallbacks);
 
-  menu_layer_set_click_config_onto_window(codeListLayer, window);
+  menu_layer_set_click_config_onto_window(code_list_layer, window);
 
-  layer_add_child(rootLayer, (Layer*)codeListLayer);
+  layer_add_child(rootLayer, (Layer*)code_list_layer);
 
   refresh_all();
 }
 
 void handle_tick(struct tm* tick_time, TimeUnits units_changed) {
   refresh_all();
-  layer_mark_dirty(barLayer);
+  layer_mark_dirty(bar_layer);
 }
 
 void handle_deinit() {
-  if (persistentStoreNeedsWriteback) {
+  if (persistent_store_needs_writeback) {
     // Write back persistent things
-    persist_write_int(P_UTCOFFSET, utcOffset);
-    persist_write_int(P_KEYCOUNT, key_list_length());
+    persist_write_int(P_UTCOFFSET, utc_offset);
+    persist_write_int(P_TOKENS_COUNT, token_list_length());
 
-    KeyListNode* node = keyList;
+    TokenListNode* node = token_list;
     short idx = 0;
     while (node) {
-      persist_write_data(P_KEYSTART + idx, node->key, sizeof(KeyInfo));
+      persist_write_data(P_TOKENS_START + idx, node->key, sizeof(TokenInfo));
       idx++;
       node = node->next;
     }
 
-    APP_LOG(APP_LOG_LEVEL_INFO, "Wrote %d keys", idx);
+    APP_LOG(APP_LOG_LEVEL_INFO, "Wrote %d tokens", idx);
   }
 
-  key_list_clear();
-  menu_layer_destroy(codeListLayer);
-  layer_destroy(barLayer);
-  text_layer_destroy(noTokensLayer);
+  token_list_clear();
+  menu_layer_destroy(code_list_layer);
+  layer_destroy(bar_layer);
+  text_layer_destroy(no_tokens_layer);
   window_destroy(window);
 }
 
