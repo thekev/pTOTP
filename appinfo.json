@@ -1,5 +1,5 @@
 {
-    "versionLabel": "2.0.0",
+    "versionLabel": "1.0.0",
     "uuid": "da96ea4e-7793-4301-9d9a-68714a902730",
     "appKeys": {
         "AMReadCredentialList_Result": 7,
@@ -14,7 +14,7 @@
         "AMCreateCredential_Name": 3
     },
     "longName": "Pebble Authenticator",
-    "versionCode": 2,
+    "versionCode": 1,
     "capabilities": [
         "configurable"
     ],
