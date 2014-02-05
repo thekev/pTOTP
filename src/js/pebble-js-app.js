@@ -61,7 +61,7 @@ Pebble.addEventListener("appmessage",
 );
 
 Pebble.addEventListener("showConfiguration", function() {
-    Pebble.openURL("http://collins-macbook-pro-2.local:8080/config/config.html#" + encodeURIComponent(JSON.stringify(Tokens)));
+    Pebble.openURL("https://pebbleauth.cpfx.ca/config.html#" + encodeURIComponent(JSON.stringify(Tokens)));
 });
 
 var ReconcileConfiguration = function(newTokens) {
