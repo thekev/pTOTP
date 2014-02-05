@@ -34,7 +34,6 @@ typedef enum AMKey {
   AMReadCredentialList = 6, // Starts credential read
   AMReadCredentialList_Result = 7, // Struct with credential info, returned in order of the list
 
-
   AMUpdateCredential = 8, // Struct with credential info
 
   AMSetCredentialListOrder = 9 // array of shorts of credential IDs
@@ -43,7 +42,7 @@ typedef enum AMKey {
 typedef struct KeyInfo {
   char name[33];
   short id;
-  char secret[33];
+  uint8_t secret[TOTP_SECRET_SIZE];
   char code[7];
 } KeyInfo;
 
@@ -257,9 +256,9 @@ void in_received_handler(DictionaryIterator *received, void *context) {
   static bool delta = false;
   Tuple *utcoffset_tuple = dict_find(received, AMUTCOffsetSet);
   if (utcoffset_tuple) {
+    delta = utcOffset != utcoffset_tuple->value->int32;
     utcOffset = utcoffset_tuple->value->int32;
-    delta = true;
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Set TZ %d", utcOffset);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Set TZ offset %d", utcOffset);
    }
 
   if (dict_find(received, AMClearCredentials)) {
@@ -287,9 +286,9 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 
   Tuple *create_credential = dict_find(received, AMCreateCredential);
   if (create_credential) {
-    char* secret = create_credential->value->cstring;
+    uint8_t* secret = create_credential->value->data;
     KeyInfo* newKey = malloc(sizeof(KeyInfo));
-    strcpy((char*)&newKey->secret, secret);
+    memcpy((char*)&newKey->secret, secret, TOTP_SECRET_SIZE);
     newKey->id = dict_find(received, AMCreateCredential_ID)->value->int32;
     strcpy((char*)&newKey->name, dict_find(received, AMCreateCredential_Name)->value->cstring);
 
@@ -344,7 +343,6 @@ void out_sent_handler(DictionaryIterator *sent, void *context) {
   }
 }
 
-
 // Standard app init
 
 void handle_init() {
@@ -360,7 +358,7 @@ void handle_init() {
   utcOffset = persist_exists(P_UTCOFFSET) ? persist_read_int(P_UTCOFFSET) : 0;
   if (persist_exists(P_KEYCOUNT)) {
     int ct = persist_read_int(P_KEYCOUNT);
-    APP_LOG(APP_LOG_LEVEL_INFO, "Starting with %d keys", P_KEYCOUNT);
+    APP_LOG(APP_LOG_LEVEL_INFO, "Starting with %d keys", ct);
     for (int i = 0; i < ct; ++i) {
       KeyInfo* key = malloc(sizeof(KeyInfo));
       persist_read_data(P_KEYSTART + i, key, sizeof(KeyInfo));

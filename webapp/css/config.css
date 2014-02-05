@@ -8,3 +8,7 @@
 	color:#aaa;
 	margin-bottom:8px;
 }
+
+#new-token-secret {
+	text-transform: uppercase;
+}

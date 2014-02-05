@@ -1,4 +1,5 @@
-var Tokens = [{"Name": "Google Account", "ID": 123}, {"Name":"Another Account 2", "ID": 232}];
+var Tokens = [];
+var BlockedIDs = [];
 var SelectedTokenID;
 var PendingWatchUpdate = false;
 
@@ -10,14 +11,17 @@ var TokenByID = function(id) {
 
 var NextTokenID = function(){
     for (var id = 0; id < 256; id++) {
-        if (!TokenByID(id)) return id;
+        if (!TokenByID(id) && BlockedIDs.indexOf(id) < 0) return id;
     }
 };
 
 $(document).ready(function(e) {
-
     if (location.hash) {
-        Tokens = JSON.parse(decodeURIComponent(location.hash.substring(1)));
+        try {
+            Tokens = JSON.parse(decodeURIComponent(location.hash.substring(1)));
+        } catch (exc) {
+
+        }
     }
 
     $('.token-list-container').sortable({
@@ -34,7 +38,6 @@ $(document).ready(function(e) {
                     RefreshTokenList();
                     SetPendingWatchUpdate();
                     Tokens = newTokens;
-                    
                 }
             }
         });
@@ -70,8 +73,8 @@ $(document).ready(function(e) {
 });
 
 var SetPendingWatchUpdate = function(){
-    $("#config-save-btn").show()
-}
+    $("#config-save-btn").show();
+};
 
 var RefreshTokenList = function(){
     $(".token-list-container").empty();
@@ -103,6 +106,7 @@ var TokenSaved = function(){
 
 var TokenDeleted = function(){
     if (!confirm("Are you sure?")) return;
+    BlockedIDs.push(SelectedTokenID); // So we don't re-use it for a new token immediately.
     Tokens.splice(Tokens.indexOf(TokenByID(SelectedTokenID)), 1);
     RefreshTokenList();
     SetPendingWatchUpdate();
@@ -110,10 +114,18 @@ var TokenDeleted = function(){
 };
 
 var TokenCreated = function(e){
+    var raw_secret;
+    try {
+        raw_secret = base32_decode($("#new-token-secret").val());
+    } catch (exc) {
+        alert("The secret could not be decoded - make sure it's typed correctly.");
+        return;
+    }
+    var base64_secret = btoa(raw_secret); // Annnd right back to base64 - so I don't need to write a JS base32 encoder too.
     var token = {
         "ID": NextTokenID(),
         "Name": $("#new-token-name").val(),
-        "Secret": $("#new-token-secret").val()
+        "Secret": base64_secret
     };
     if (!token.Name || !token.Secret) {
         alert("You must enter a name and secret for the new token");
@@ -127,4 +139,42 @@ var TokenCreated = function(e){
 
 var ConfigurationSave = function(){
     window.location.href = "pebblejs://close#" + encodeURIComponent(JSON.stringify(Tokens));
-}
+};
+
+// base32 stuff - reimplemented from the C equivalent.
+var base32_decode = function(input) {
+    var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567=";
+    var buffer = 0;
+    var bitsLeft = 0;
+    var result = "";
+    var i = 0;
+    var count = 0;
+    input = input.toUpperCase();
+    while (i < input.length) {
+        var ch = input.charAt(i++);
+        if (ch == '0') {
+            ch = 'O';
+        } else if (ch == '1') {
+            ch = 'L';
+        } else if (ch == '8') {
+            ch = 'B';
+        }
+        var val = alphabet.indexOf(ch);
+        if (val >= 0 && val < 32) {
+            buffer <<= 5;
+            buffer |= val;
+            bitsLeft += 5;
+            if (bitsLeft >= 8) {
+                result += String.fromCharCode((buffer >> (bitsLeft - 8)) & 0xFF);
+                bitsLeft -= 8;
+            }
+        } else {
+            throw Error("Character " + ch + " out of range");
+        }
+    }
+    if (bitsLeft > 0) {
+      buffer <<= 5;
+      result += String.fromCharCode((buffer >> (bitsLeft - 3)) & 0xFF);
+    }
+    return result;
+};

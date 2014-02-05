@@ -7,13 +7,18 @@ Pebble.addEventListener("ready",
     }
 );
 
-var unCString = function(array, offset) {
+var UnCString = function(array, offset) {
     var string = "";
     for (var i = offset; i < array.length; i++){
         if (array[i] === 0) break;
         string += String.fromCharCode(array[i]);
     }
     return string;
+};
+
+var ToByteArray = function(input) {
+    // Otherwise the JS appmessage framework will mandle these characters on transmission.
+    return input.split('').map(function(e){return e.charCodeAt(0);});
 };
 
 var TokenByID = function(id) {
@@ -49,7 +54,7 @@ Pebble.addEventListener("appmessage",
     if (e.payload.AMReadCredentialList_Result) {
         var token = {};
         token.ID = e.payload.AMReadCredentialList_Result[0];
-        token.Name = unCString(e.payload.AMReadCredentialList_Result, 2);
+        token.Name = UnCString(e.payload.AMReadCredentialList_Result, 2);
         Tokens.push(token);
     }
   }
@@ -95,15 +100,14 @@ var ReconcileConfiguration = function(newTokens) {
     }
     for (idx in to_create) {
         token = to_create[idx];
-        QueueAppMessage({"AMCreateCredential": token.Secret, "AMCreateCredential_ID": token.ID, "AMCreateCredential_Name": token.Name});
-        token.Secret = "";
+        QueueAppMessage({"AMCreateCredential": ToByteArray(atob(token.Secret)), "AMCreateCredential_ID": token.ID, "AMCreateCredential_Name": token.Name});
     }
     for (idx in to_update) {
         token = to_update[idx];
         QueueAppMessage({"AMUpdateCredential": [token.ID, 0, token.Name, 0]});
     }
     QueueAppMessage({"AMSetCredentialListOrder": new_ids});
-    Tokens = newTokens;
+    Tokens = newTokens.map(function(e){e.Secret = null; return e;}); // Strip out the secrets so they don't appear in further log messages.
 };
 
 Pebble.addEventListener("webviewclosed", function(e) {
@@ -114,3 +118,6 @@ Pebble.addEventListener("webviewclosed", function(e) {
     }
     ReconcileConfiguration(newTokens);
 });
+
+// slightly modified atob implementation from https://github.com/davidchambers/Base64.js
+(function(){function t(t){this.message=t}var e="undefined"!=typeof exports?exports:this,r="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";t.prototype=Error(),t.prototype.name="InvalidCharacterError",e.atob||(e.atob=function(e){if(e=e.replace(/=+$/,""),1==e.length%4)throw new t("'atob' failed: The string to be decoded is not correctly encoded.");for(var o,n,a=0,i=0,c="";n=e.charAt(i++);~n&&(o=a%4?64*o+n:n,a++%4)?c+=String.fromCharCode(255&o>>(6&-2*a)):0)n=r.indexOf(n);return c})})();

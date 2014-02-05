@@ -2,6 +2,8 @@
 // modified from original work by Markus Gutschke to remove some
 // functions unnecessary to that purpose.
 //
+// Further modified to eliminate the internal Base32 decoding, instead accepting the raw secret bytes.
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -32,4 +34,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-int generateCode(const char *key, unsigned long tm);
+#include "pebble.h"
+
+#define TOTP_SECRET_SIZE 10
+
+int generateCode(const uint8_t *key, unsigned long tm);
