@@ -150,11 +150,25 @@ bool key_list_delete(KeyInfo* key){
   return false;
 }
 
+void key_list_supplant(KeyListNode* newList) {
+  KeyListNode* last = NULL;
+  // Free the existing list nodes (but not their KeyInfos)
+  while (keyList) {
+    last = keyList;
+    keyList = last->next;
+    free(last);
+  }
+  keyList = newList;
+  keyListDirty = true;
+}
+
 void keyinfo2publickeyinfo(KeyInfo* key, PublicKeyInfo* public) {
   public->id = key->id;
   strcpy(public->name, key->name);
 }
+
 void publickeyinfo2keyinfo(PublicKeyInfo* public, KeyInfo* key) {
+  key->id = public->id;
   strcpy(key->name, public->name);
 }
 
@@ -199,9 +213,7 @@ void refresh_all(void){
     menu_layer_reload_data(codeListLayer);
   }
   show_no_tokens_message(!hasKeys);
-
 }
-
 
 void bar_layer_update(Layer *l, GContext* ctx) {
   graphics_context_set_fill_color(ctx, GColorBlack);
@@ -224,7 +236,7 @@ int16_t get_cell_height(struct MenuLayer *menu_layer, MenuIndex *cell_index, voi
   return 55;
 }
 
-void key_list_read_iter(void) {
+void key_list_retrieve_iter(void) {
   if (key_list_read_index == key_list_length()) return;
 
   KeyInfo* key = key_by_list_index(key_list_read_index);
@@ -232,7 +244,6 @@ void key_list_read_iter(void) {
   DictionaryIterator *iter;
   app_message_outbox_begin(&iter);
 
-  APP_LOG(APP_LOG_LEVEL_INFO, "Listing credentials - iter %d", key_list_read_index);
   keyinfo2publickeyinfo(key, public);
   Tuplet record = TupletBytes(AMReadCredentialList_Result, (uint8_t*)public, sizeof(PublicKeyInfo));
   dict_write_tuplet(iter, &record);
@@ -248,18 +259,18 @@ void in_received_handler(DictionaryIterator *received, void *context) {
   if (utcoffset_tuple) {
     utcOffset = utcoffset_tuple->value->int32;
     delta = true;
-    APP_LOG(APP_LOG_LEVEL_INFO, "Set TZ %d", utcOffset);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Set TZ %d", utcOffset);
    }
 
   if (dict_find(received, AMClearCredentials)) {
-    APP_LOG(APP_LOG_LEVEL_INFO, "Clear credentials");
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Clear credentials");
     key_list_clear();
     delta = true;
   }
 
   Tuple *delete_credential = dict_find(received, AMDeleteCredential);
   if (delete_credential) {
-    APP_LOG(APP_LOG_LEVEL_INFO, "Delete credential %d", delete_credential->value->int8);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Delete credential %d", delete_credential->value->int8);
     KeyInfo* key = key_by_id(delete_credential->value->int8);
     key_list_delete(key);
     free(key);
@@ -269,7 +280,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
   Tuple *update_credential = dict_find(received, AMUpdateCredential);
   if (update_credential) {
     PublicKeyInfo* public = (PublicKeyInfo*)&update_credential->value->data;
-    APP_LOG(APP_LOG_LEVEL_INFO, "Update credential %d - %s", public->id, public->name);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Update credential %d - %s", public->id, public->name);
     publickeyinfo2keyinfo(public, key_by_id(public->id));
     delta = true;
   }
@@ -283,24 +294,27 @@ void in_received_handler(DictionaryIterator *received, void *context) {
     strcpy((char*)&newKey->name, dict_find(received, AMCreateCredential_Name)->value->cstring);
 
     key_list_add(newKey);
-    APP_LOG(APP_LOG_LEVEL_INFO, "Create credential %s", secret);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Create credential %d - %s", newKey->id, newKey->name);
     delta = true;
   }
+
   if (dict_find(received, AMReadCredentialList)) {
-    APP_LOG(APP_LOG_LEVEL_INFO, "Listing credentials");
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Listing credentials");
     key_list_read_index = 0;
-    key_list_read_iter();
+    key_list_retrieve_iter();
   }
 
   Tuple *reorder_list = dict_find(received, AMSetCredentialListOrder);
   if (reorder_list) {
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Reordering credentials");
     KeyListNode* newList = NULL;
     KeyListNode* node = NULL;
     KeyListNode* last = NULL;
+
+    // Build a new list using the existing KeyInfos
     int ct = key_list_length();
     for (int i = 0; i < ct; ++i)
     {
-      // Build a new list using the existing KeyInfos
       node = malloc(sizeof(KeyListNode));
       if (last) {
         last->next = node;
@@ -311,16 +325,11 @@ void in_received_handler(DictionaryIterator *received, void *context) {
       node->key = key_by_id(reorder_list->value->data[i]);
       last = node;
     }
-    // Free the existing list.
-    last = NULL;
-    while (keyList) {
-      last = keyList;
-      keyList = last->next;
-      free(last);
-    }
-    keyList = newList;
+
+    // Free the existing list and replace.
+    key_list_supplant(newList);
+
     delta = true;
-    keyListDirty = true;
   }
 
   persistentStoreNeedsWriteback = persistentStoreNeedsWriteback || delta;
@@ -330,9 +339,8 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 }
 
 void out_sent_handler(DictionaryIterator *sent, void *context) {
-  APP_LOG(APP_LOG_LEVEL_INFO, "Sent message");
   if (dict_find(sent, AMReadCredentialList_Result)) {
-    key_list_read_iter();
+    key_list_retrieve_iter();
   }
 }
 

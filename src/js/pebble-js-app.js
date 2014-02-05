@@ -85,7 +85,7 @@ var ReconcileConfiguration = function(newTokens) {
         }
     }
 
-    console.log("Creating " + JSON.stringify(to_create));
+    console.log("Creating " + JSON.stringify(to_create.map(function(e){return {"Name": e.Name, "ID": e.ID};}))); // Strip the secret so it doesn't appear in logs.
     console.log("Updating " + JSON.stringify(to_update));
     console.log("Deleting " + JSON.stringify(to_delete_ids));
 
