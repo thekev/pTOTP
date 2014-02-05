@@ -14,11 +14,10 @@
 
 #include "generate.h"
 #include "unixtime.h"
-#include "timezone.h"
 
 #define P_UTCOFFSET   1
-#define P_KEYCOUNT      2
-#define P_KEYSTART   10000
+#define P_KEYCOUNT    2
+#define P_KEYSTART    10000
 
 Window *window;
 

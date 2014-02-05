@@ -1,7 +1,7 @@
 {
-  "uuid": "f3617030-8706-43b6-adde-d73fdb380244",
-  "shortName": "pTOTP",
-  "longName": "pTOTP",
+  "uuid": "da96ea4e-7793-4301-9d9a-68714a902730",
+  "shortName": "PebbleAuth",
+  "longName": "Pebble Authenticator",
   "capabilities": [ "configurable" ],
   "companyName": "Public Domain",
   "versionCode": 2,
@@ -18,35 +18,11 @@
     "AMClearCredentials": 5,
     "AMReadCredentialList": 6,
     "AMReadCredentialList_Result": 7,
-    "AMUpdateCredential": 8
+    "AMUpdateCredential": 8,
+    "AMSetCredentialListOrder": 9
   },
   "resources": {
     "media": [
-      {
-        "type":"raw",
-        "name":"GMT_OFFSET",
-        "file":"gmt_offset.bin"
-       },
-       {
-       "type":"raw",
-       "name":"SECRET_KEY",
-       "file":"secret_key.txt"
-       },
-       {
-       "type":"raw",
-       "name":"SECRET_NAME",
-       "file":"key_names.txt"
-       },
-       {
-       "type":"raw",
-       "name":"SECRET_COUNT",
-       "file":"key_count.txt"
-       },
-       {
-       "type":"raw",
-       "name":"IS_DST",
-       "file":"is_dst.bin"
-       }
     ]
   }
 }
