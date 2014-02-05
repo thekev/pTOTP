@@ -1,0 +1,10 @@
+.token-list li a {
+	height:30px;
+	line-height: 30px;
+}
+
+#no-tokens-message h3 {
+	text-align: center;
+	color:#aaa;
+	margin-bottom:8px;
+}

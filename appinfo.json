@@ -2,6 +2,7 @@
   "uuid": "f3617030-8706-43b6-adde-d73fdb380244",
   "shortName": "pTOTP",
   "longName": "pTOTP",
+  "capabilities": [ "configurable" ],
   "companyName": "Public Domain",
   "versionCode": 2,
   "versionLabel": "2.0.0",
@@ -9,7 +10,15 @@
     "watchface": false
   },
   "appKeys": {
-    "dummy": 0
+    "utcoffset_set": 0,
+    "AMCreateCredential": 1,
+    "AMCreateCredential_ID": 2,
+    "AMCreateCredential_Name": 3,
+    "AMDeleteCredential": 4,
+    "AMClearCredentials": 5,
+    "AMReadCredentialList": 6,
+    "AMReadCredentialList_Result": 7,
+    "AMUpdateCredential": 8
   },
   "resources": {
     "media": [

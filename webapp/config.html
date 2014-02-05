@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <link rel="stylesheet" href="http://code.jquery.com/mobile/1.4.0/jquery.mobile-1.4.0.min.css" />
+        <link rel="stylesheet" href="css/config.css" />
+        <script src="http://code.jquery.com/jquery-1.9.1.min.js"></script>
+        <script src="http://code.jquery.com/mobile/1.4.0/jquery.mobile-1.4.0.min.js"></script>
+        <script src="js/jquery-ui-1.10.4.custom.min.js"></script>
+        <script src="js/jquery.ui.touch-punch.min.js"></script>
+        <script src="js/config.js"></script>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+        <script>document.write('<script src="http://' + (location.host || 'localhost').split(':')[0] + ':35729/livereload.js?snipver=1"></' + 'script>')</script>
+    </head>
+    <body>
+        <div data-role="page" id="token-list">
+            <div data-role="header">
+                <h1>Your Tokens</h1>
+            </div>
+            <div data-role="content" id="main">
+                <ul data-role="listview" data-inset="true" class="token-list">
+                </ul>
+                <div id="no-tokens-message"><h3>Add your first token below!</h3></div>
+            </div>
+            <a href="#token-new" class="ui-btn ui-btn-icon-right ui-icon-carat-r">New Token</a>
+            <a id="config-save-btn" class="ui-btn ui-btn-icon-right ui-icon-lock">Send to Watch</a>
+        </div>
+        <div data-role="page" id="token-detail">
+            <div data-role="header">
+                <a data-rel="back" class="ui-btn-left ui-btn-inline ui-btn">Cancel</a>
+                <h1>Edit Token</h1>
+            </div>
+            <div data-role="content">
+                <label for="token-name">Name</label>
+                <input type="text" name="token-name" id="token-name" maxlength="32"/>
+            </div>
+            <a class="ui-btn ui-icon-check ui-btn-icon-right" id="token-save-btn">Save Token</a>
+            <a class="ui-btn ui-icon-delete ui-btn-icon-right" id="token-delete-btn">Delete Token</a>
+        </div>
+        <div data-role="page" id="token-new">
+            <div data-role="header">
+                <a data-rel="back" class="ui-btn-left ui-btn-inline ui-btn">Cancel</a>
+                <h1>New Token</h1>
+            </div>
+                <div data-role="content">
+                    <label for="new-token-name">Name</label>
+                    <input type="text" name="new-token-name" id="new-token-name" placeholder="johan@gmail.com" required maxlength="32"/>
+                    <label for="new-token-secret">Secret</label>
+                    <input type="text" name="new-token-secret" id="new-token-secret" placeholder="2XC2E64AAG0T23AR" maxlength="16" required/>
+                </div>
+                <a class="ui-btn ui-icon-check ui-btn-icon-right" id="token-create-btn">Create Token</a>
+        </div>
+    </body>
+</html>

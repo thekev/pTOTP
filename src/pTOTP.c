@@ -16,253 +16,361 @@
 #include "unixtime.h"
 #include "timezone.h"
 
-#define TIME_ZONE_KEY   1
-#define IS_DST_KEY      2
-#define KEY_INDEX_KEY   3
+#define P_UTCOFFSET   1
+#define P_KEYCOUNT      2
+#define P_KEYSTART   10000
 
 Window *window;
 
-TextLayer *currentKey, *currentCode, *currentTime, *currentOffset;
+typedef enum AMKey {
+  AMUTCOffsetSet = 0, // Int32 with offset
+
+  AMCreateCredential = 1, // Char array with secret
+  AMCreateCredential_ID = 2, // Int with ID for credential (provided by phone)
+  AMCreateCredential_Name = 3, // Char array with name for credential (provided by phone)
+
+  AMDeleteCredential = 4, // Short with credential ID
+  AMClearCredentials = 5,
+
+  AMReadCredentialList = 6, // Starts credential read
+  AMReadCredentialList_Result = 7, // Struct with credential info, returned in order of the list
+
+
+  AMUpdateCredential = 8, // Struct with credential info
+
+  AMCredentialListOrder = 9 // array of shorts of credential IDs
+} AMKey;
+
+typedef struct KeyInfo {
+  char name[33];
+  short id;
+  char secret[33];
+  char code[7];
+} KeyInfo;
+
+typedef struct PublicKeyInfo {
+  short id;
+  char name[33];
+} PublicKeyInfo;
+
+typedef struct KeyListNode {
+  struct KeyListNode* next;
+  KeyInfo* key;
+} KeyListNode;
+
+KeyInfo keys[0];
+KeyListNode* keyList = NULL;
+bool keyListDirty = false;
+bool persistentStoreNeedsWriteback = false;
 
 Layer *barLayer;
 
-unsigned short keyCount = 8;
-unsigned short keyIndex = 0;
+TextLayer *noTokensLayer;
 
-unsigned short timeZoneIndex = 0;
+MenuLayer *codeListLayer;
 
-bool isDST = false;
+int utcOffset;
 
-static char codeDisplayBuffer[7] = "000000";
-void redraw(unsigned int code) {  
-  for(int x=0;x<6;x++) {
-    codeDisplayBuffer[5-x] = '0'+(code % 10);
-    code /= 10;
+void key_list_add(KeyInfo* key) {
+  KeyListNode* node = malloc(sizeof(KeyListNode));
+  node->next = NULL;
+  node->key = key;
+
+  if (!keyList) {
+    keyList = node;
+  } else {
+    KeyListNode* tail = keyList;
+    while (tail->next != NULL) {
+      tail = tail->next;
+    }
+    tail->next = node;
   }
-
-  text_layer_set_text(currentCode, codeDisplayBuffer);
+  keyListDirty = true;
 }
 
-
-bool freshCode = true;
-
-void recode(char *secretKey, bool keyChange) {
-  static unsigned int lastCode = 0;
-  static unsigned short oldTimeZoneIndex = 255;
-  static unsigned int lastQuantizedTimeGenerated = 0;
-  static int offset;
-  static char offsetText[] = "-12:00";
-
-  const char *key = secretKey;
-
-  if(timeZoneIndex != oldTimeZoneIndex) {
-    text_layer_set_text(currentTime, tz_names[timeZoneIndex]);
-    oldTimeZoneIndex = timeZoneIndex;
-    offset = (tz_offsets[timeZoneIndex]+(isDST ? 3600 : 0));
-    snprintf(offsetText, sizeof(offsetText), "%d:%.2d", offset/(60*60), abs((offset/60)%60));
-    text_layer_set_text(currentOffset, offsetText);
+KeyInfo* key_by_list_index(int index) {
+  KeyListNode* node = keyList;
+  for (int i = 0; i < index; ++i)
+  {
+    node = node->next;
   }
+  return node->key;
+}
 
-  unsigned long utcTime = time(NULL)-offset;
+KeyInfo* key_by_id(short id) {
+  KeyListNode* node = keyList;
+  while (node) {
+    if (node->key->id == id) {
+      return node->key;
+    }
+    node = node->next;
+  }
+  return NULL;
+}
+
+short key_list_length(void){
+  short size = 0;
+  KeyListNode* node = keyList;
+  while (node) {
+    node = node->next;
+    size++;
+  }
+  return size;
+}
+
+void key_list_clear(void){
+  KeyListNode* temp;
+  while (keyList) {
+    temp = keyList;
+    keyList = temp->next;
+    free(temp->key); // Since it'd be a pain to do this otherwise.
+    free(temp);
+  }
+  keyListDirty = true;
+}
+
+bool key_list_delete(KeyInfo* key){
+  KeyListNode* node = keyList;
+  KeyListNode* last = NULL;
+  while (node && node->key != key) {
+    last = node;
+    node = node->next;
+  }
+  if (node) {
+    if (last) {
+      last->next = node->next;
+    } else {
+      keyList = NULL;
+    }
+    free(node);
+    keyListDirty = true;
+    return true;
+  }
+  return false;
+}
+
+void keyinfo2publickeyinfo(KeyInfo* key, PublicKeyInfo* public) {
+  public->id = key->id;
+  strcpy(public->name, key->name);
+}
+void publickeyinfo2keyinfo(PublicKeyInfo* public, KeyInfo* key) {
+  strcpy(key->name, public->name);
+}
+
+void code2char(unsigned int code, char* out) {
+  for(int x=0;x<6;x++) {
+    out[5-x] = '0'+(code % 10);
+    code /= 10;
+  }
+}
+
+void show_no_tokens_message(bool show) {
+  layer_set_hidden((Layer*)codeListLayer, show);
+  layer_set_hidden(barLayer, show);
+  layer_set_hidden((Layer*)noTokensLayer, !show);
+}
+
+void refresh_all(void){
+  static unsigned int lastQuantizedTimeGenerated = 0;
+
+  unsigned long utcTime = time(NULL) - utcOffset;
 
   unsigned int quantized_time = utcTime/30;
 
-  //Assuming generating a code is expensive, only generate it if
-  //the time has changed or the key has changed.
-  if(quantized_time == lastQuantizedTimeGenerated && !keyChange)
+  if (quantized_time == lastQuantizedTimeGenerated && !keyListDirty) {
     return;
+  }
+
+  keyListDirty = false;
+
+  bool hasKeys = false;
 
   lastQuantizedTimeGenerated = quantized_time;
 
-  unsigned int code = generateCode(key, quantized_time);
-
-  if(lastCode != code) {
-    redraw(code);
-    freshCode = true;
+  KeyListNode* keyNode = keyList;
+  while (keyNode) {
+    unsigned int code = generateCode(keyNode->key->secret, quantized_time);
+    code2char(code, (char*)&keyNode->key->code);
+    keyNode = keyNode->next;
+    hasKeys = true;
   }
-}
-
-//Technically not necessary but space-padding is much nicer.
-void strip(char *s, int len) {
-  while(len >= 0) {
-    if(s[len] == ' ' || s[len] == '\0')
-      s[len] = '\0';
-    else
-      break;
-    --len;
+  if (hasKeys) {
+    menu_layer_reload_data(codeListLayer);
   }
+  show_no_tokens_message(!hasKeys);
+
 }
 
-void reload() {
-  static unsigned short oldKeyIndex = 255;
-  static char secretKey[33];
-  static char secretName[33];
-
-
-  //TODO: Eventually refactor to not require fixed-width data.
-  if(keyIndex != oldKeyIndex) {
-    resource_load_byte_range(resource_get_handle(RESOURCE_ID_SECRET_KEY), 33*keyIndex, (uint8_t *)&secretKey, 32);
-    strip(secretKey, 32);
-    resource_load_byte_range(resource_get_handle(RESOURCE_ID_SECRET_NAME), 33*keyIndex, (uint8_t *)&secretName, 32);
-    strip(secretName, 32);
-    oldKeyIndex = keyIndex;
-
-    text_layer_set_text(currentKey, secretName);
-    recode(secretKey, true);
-  }
-  else
-    recode(secretKey, false);
-}
-
-
-// Modify these common button handlers
-
-void up_single_click_handler(ClickRecognizerRef recognizer, void *window) {
-  (void)recognizer;
-  (void)window;
-
-  ++keyIndex;
-  if(keyIndex >= keyCount)
-    keyIndex = 0;
-
-  reload();
-}
-
-
-void down_single_click_handler(ClickRecognizerRef recognizer, void *window) {
-  (void)recognizer;
-  (void)window;
-
-  if(keyIndex == 0)
-    keyIndex = keyCount;
-  --keyIndex;
-
-  reload();
-}
-
-void select_single_click_handler(ClickRecognizerRef recognizer, void *window) {
-  (void)recognizer;
-  (void)window;
-
-  ++timeZoneIndex;
-  if(timeZoneIndex >= TIMEZONE_COUNT)
-    timeZoneIndex = 0;
-
-  reload();
-
-  //TODO
-}
-
-// This usually won't need to be modified
-
-void click_config_provider(void * context) {
-  window_single_click_subscribe(BUTTON_ID_SELECT, select_single_click_handler);
-
-  window_single_repeating_click_subscribe(BUTTON_ID_UP, 100, up_single_click_handler);
-
-  window_single_repeating_click_subscribe(BUTTON_ID_DOWN, 100, down_single_click_handler);
-}
 
 void bar_layer_update(Layer *l, GContext* ctx) {
   //static int offset, tick;
   //GSize sz;
-  if(freshCode) {
-    /*
-    sz = graphics_text_layout_get_max_used_size(ctx, codeDisplayBuffer, fonts_get_system_font(FONT_KEY_BITHAM_34_MEDIUM_NUMBERS),
-                                                   GRect(0,32,144,36), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
-                                                   NULL);
-
-    offset = (144-30*(sz.w/30))/2;
-    tick = sz.w/30;
-
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "W: %d, H:%d, O: %d, T: %d", sz.w, sz.h, offset, tick);
-    */
-    //TODO: graphics_text_layout_get_max_used_size is generating complete garbage.
-    freshCode = false;
-  }
   graphics_context_set_fill_color(ctx, GColorBlack);
   unsigned short slice = 30-(time(NULL)%30);
-  graphics_fill_rect(ctx, GRect(12,0,slice*4,5), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(0,0,(slice*48)/10,5), 0, GCornerNone);
 }
 
+void draw_code_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *callback_context){
+  graphics_context_set_text_color(ctx, GColorBlack);
+  KeyInfo* key = key_by_list_index(cell_index->row);
+  graphics_draw_text(ctx, (char*)key->name, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(0, 36, 144, 20), GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+  graphics_draw_text(ctx, (char*)key->code, fonts_get_system_font(FONT_KEY_BITHAM_34_MEDIUM_NUMBERS), GRect(0, 0, 144, 100), GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+}
+
+uint16_t num_code_rows(struct MenuLayer *menu_layer, uint16_t section_index, void *callback_context){
+  return key_list_length();
+}
+
+int16_t get_cell_height(struct MenuLayer *menu_layer, MenuIndex *cell_index, void *callback_context) {
+  return 55;
+}
+
+ void in_received_handler(DictionaryIterator *received, void *context) {
+  static bool delta = false;
+  Tuple *utcoffset_tuple = dict_find(received, AMUTCOffsetSet);
+  if (utcoffset_tuple) {
+    utcOffset = utcoffset_tuple->value->int32;
+    delta = true;
+    APP_LOG(APP_LOG_LEVEL_INFO, "Set TZ %d", utcOffset);
+   }
+
+  if (dict_find(received, AMClearCredentials)) {
+    APP_LOG(APP_LOG_LEVEL_INFO, "Clear credentials");
+    key_list_clear();
+    delta = true;
+  }
+
+  Tuple *delete_credential = dict_find(received, AMDeleteCredential);
+  if (delete_credential) {
+    APP_LOG(APP_LOG_LEVEL_INFO, "Delete credential %d", delete_credential->value->int8);
+    KeyInfo* key = key_by_id(delete_credential->value->int8);
+    key_list_delete(key);
+    free(key);
+    delta = true;
+  }
+
+  Tuple *update_credential = dict_find(received, AMUpdateCredential);
+  if (update_credential) {
+    PublicKeyInfo* public = (PublicKeyInfo*)&update_credential->value->data;
+    uint8_t* buf = update_credential->value->data;
+    APP_LOG(APP_LOG_LEVEL_INFO, "Update credential %d - %s", public->id, public->name);
+    publickeyinfo2keyinfo(public, key_by_id(public->id));
+    delta = true;
+  }
+
+  Tuple *create_credential = dict_find(received, AMCreateCredential);
+  if (create_credential) {
+    char* secret = create_credential->value->cstring;
+    KeyInfo* newKey = malloc(sizeof(KeyInfo));
+    strcpy((char*)&newKey->secret, secret);
+    newKey->id = dict_find(received, AMCreateCredential_ID)->value->int32;
+    strcpy((char*)&newKey->name, dict_find(received, AMCreateCredential_Name)->value->cstring);
+
+    key_list_add(newKey);
+    APP_LOG(APP_LOG_LEVEL_INFO, "Create credential %s", secret);
+    delta = true;
+   }
+   if (dict_find(received, AMReadCredentialList)) {
+    APP_LOG(APP_LOG_LEVEL_INFO, "Listing credentials");
+    PublicKeyInfo* public = malloc(sizeof(PublicKeyInfo));
+    KeyListNode* node = keyList;
+    while (node) {
+      DictionaryIterator *iter;
+      app_message_outbox_begin(&iter);
+      keyinfo2publickeyinfo(node->key, public);
+      Tuplet record = TupletBytes(AMReadCredentialList_Result, (uint8_t*)public, sizeof(PublicKeyInfo));
+      dict_write_tuplet(iter, &record);
+      app_message_outbox_send();
+      node = node->next;
+    }
+   }
+
+  persistentStoreNeedsWriteback = persistentStoreNeedsWriteback || delta;
+  if (delta){
+    refresh_all();
+  }
+ }
 
 // Standard app init
 
 void handle_init() {
-  keyIndex = (persist_exists(KEY_INDEX_KEY) ? persist_read_int(KEY_INDEX_KEY) : 0);
 
-  unsigned char offset = '0';
-  unsigned char rawDST = 'N';
-  unsigned char rawCount = '1';
+  app_message_register_inbox_received(in_received_handler);
 
-  resource_load_byte_range(resource_get_handle(RESOURCE_ID_GMT_OFFSET), 0, &offset, 1);
+  const uint32_t inbound_size = 64;
+  const uint32_t outbound_size = 64;
+  app_message_open(inbound_size, outbound_size);
 
-  timeZoneIndex = (persist_exists(TIME_ZONE_KEY) ? persist_read_int(TIME_ZONE_KEY) : (offset - '0'));
+  // Load persisted data
+  utcOffset = persist_exists(P_UTCOFFSET) ? persist_read_int(P_UTCOFFSET) : 0;
+  if (persist_exists(P_KEYCOUNT)) {
+    int ct = persist_read_int(P_KEYCOUNT);
+    APP_LOG(APP_LOG_LEVEL_INFO, "Starting with %d keys", P_KEYCOUNT);
+    for (int i = 0; i < ct; ++i) {
+      KeyInfo* key = malloc(sizeof(KeyInfo));
+      persist_read_data(P_KEYSTART + i, key, sizeof(KeyInfo));
+      key_list_add(key);
+    }
+  }
 
-  resource_load_byte_range(resource_get_handle(RESOURCE_ID_IS_DST), 0, &rawDST, 1);
-
-  isDST = (persist_exists(IS_DST_KEY) ? persist_read_bool(IS_DST_KEY) : (rawDST == 'Y'));
-
-  resource_load_byte_range(resource_get_handle(RESOURCE_ID_SECRET_COUNT), 0, &rawCount, 1);
-
-  keyCount = rawCount - '0';
-  
   window = window_create();
   window_stack_push(window, true /* Animated */);
 
-  //Great for debugging the layout.
-  //window_set_background_color(&window, GColorBlack);
-
   Layer* rootLayer = window_get_root_layer(window);
   GRect rootLayerRect = layer_get_bounds(rootLayer);
-  barLayer = layer_create(GRect(0,70,rootLayerRect.size.w,5));
+  barLayer = layer_create(GRect(0,rootLayerRect.size.h-5,rootLayerRect.size.w,5));
   layer_set_update_proc(barLayer, bar_layer_update);
   layer_add_child(rootLayer, barLayer);
 
-  currentKey = text_layer_create(GRect(0,0,rootLayerRect.size.w,22));
-  text_layer_set_font(currentKey, fonts_get_system_font(FONT_KEY_GOTHIC_18));
-  text_layer_set_text_alignment(currentKey, GTextAlignmentCenter);
-  layer_add_child(rootLayer, text_layer_get_layer(currentKey));
+  noTokensLayer = text_layer_create(GRect(0, rootLayerRect.size.h/2-35, rootLayerRect.size.w, 30*2));
+  text_layer_set_text(noTokensLayer, "No Tokens");
+  text_layer_set_font(noTokensLayer, fonts_get_system_font(FONT_KEY_BITHAM_30_BLACK));
+  text_layer_set_text_color(noTokensLayer, GColorBlack);
+  text_layer_set_text_alignment(noTokensLayer, GTextAlignmentCenter);
+  layer_add_child(rootLayer, (Layer*)noTokensLayer);
 
-  currentCode = text_layer_create(GRect(0,32,rootLayerRect.size.w,36));
-  text_layer_set_font(currentCode, fonts_get_system_font(FONT_KEY_BITHAM_34_MEDIUM_NUMBERS));
-  text_layer_set_text_alignment(currentCode, GTextAlignmentCenter);
-  layer_add_child(rootLayer, text_layer_get_layer(currentCode));
+  codeListLayer = menu_layer_create(GRect(0,0,rootLayerRect.size.w, rootLayerRect.size.h - 4));
 
-  currentTime = text_layer_create(GRect(0,rootLayerRect.size.h-(15+22),(rootLayerRect.size.w/3)*2,22));
-  text_layer_set_font(currentTime, fonts_get_system_font(FONT_KEY_GOTHIC_18));
-  text_layer_set_text_alignment(currentTime, GTextAlignmentLeft);
-  layer_add_child(rootLayer, text_layer_get_layer(currentTime));
+  MenuLayerCallbacks menuCallbacks = {
+    .draw_row = draw_code_row,
+    .get_num_rows = num_code_rows,
+    .get_cell_height = get_cell_height
+  };
+  menu_layer_set_callbacks(codeListLayer, NULL, menuCallbacks);
 
-  currentOffset = text_layer_create(GRect((rootLayerRect.size.w/3)*2,rootLayerRect.size.h-(15+22),rootLayerRect.size.w/3,22));
-  text_layer_set_font(currentOffset, fonts_get_system_font(FONT_KEY_GOTHIC_18));
-  text_layer_set_text_alignment(currentOffset, GTextAlignmentRight);
-  layer_add_child(rootLayer, text_layer_get_layer(currentOffset));
+  menu_layer_set_click_config_onto_window(codeListLayer, window);
 
-  // Attach our desired button functionality
-  window_set_click_config_provider(window, (ClickConfigProvider) click_config_provider);
+  layer_add_child(rootLayer, (Layer*)codeListLayer);
 
-  reload();
+  refresh_all();
 }
 
 void handle_tick(struct tm* tick_time, TimeUnits units_changed) {
-  //(void)ctx;
-  //(void)event;
-
-  reload();
+  refresh_all();
   layer_mark_dirty(barLayer);
 }
 
 void handle_deinit() {
-  persist_write_int(TIME_ZONE_KEY, timeZoneIndex);
-  persist_write_bool(IS_DST_KEY, isDST);
-  persist_write_bool(KEY_INDEX_KEY, keyIndex);
-  
-  text_layer_destroy(currentOffset);
-  text_layer_destroy(currentTime);
-  text_layer_destroy(currentCode);
-  text_layer_destroy(currentKey);
+  if (persistentStoreNeedsWriteback) {
+    // Write back persistent things
+    persist_write_int(P_UTCOFFSET, utcOffset);
+    persist_write_int(P_KEYCOUNT, key_list_length());
+
+    KeyListNode* node = keyList;
+    short idx = 0;
+    while (node) {
+      persist_write_data(P_KEYSTART + idx, node->key, sizeof(KeyInfo));
+      idx++;
+      node = node->next;
+    }
+
+    APP_LOG(APP_LOG_LEVEL_INFO, "Wrote %d keys", idx);
+  }
+
+  key_list_clear();
+  menu_layer_destroy(codeListLayer);
   layer_destroy(barLayer);
+  text_layer_destroy(noTokensLayer);
   window_destroy(window);
 }
 
