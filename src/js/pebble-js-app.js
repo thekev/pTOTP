@@ -3,7 +3,7 @@ var Tokens = [];
 Pebble.addEventListener("ready",
     function(e) {
         console.log("Hello world! - Sent from your javascript application.");
-        Pebble.sendAppMessage( { "utcoffset_set": (new Date()).getTimezoneOffset() * -60})
+        Pebble.sendAppMessage( { "utcoffset_set": (new Date()).getTimezoneOffset() * -60});
         //setTimeout(function(){Pebble.sendAppMessage( { "AMClearCredentials": 0, "AMCreateCredential": "test 123", "AMCreateCredential_ID": 1, "AMCreateCredential_Name": "hey-o"});}, 3000);
         setTimeout(function(){Pebble.sendAppMessage( { "AMReadCredentialList": 1});}, 100);
     }
@@ -45,7 +45,7 @@ var TokenByID = function(id) {
 var ReconcileConfiguration = function(newTokens) {
     var existing_ids = [];
     var new_ids = [];
-    var idx; // So JSLint stops complaining.
+    var idx, token; // So JSLint stops complaining.
     for (idx in Tokens) { existing_ids.push(Tokens[idx].ID); } // I can pretend it's list comprehension, right?
     for (idx in newTokens) { new_ids.push(newTokens[idx].ID); }
     // Which have been deleted (by ID only)?
@@ -76,11 +76,11 @@ var ReconcileConfiguration = function(newTokens) {
         Pebble.sendAppMessage( { "AMDeleteCredential": [to_delete_ids[idx]]});
     }
     for (idx in to_create) {
-        var token = to_create[idx];
+        token = to_create[idx];
         Pebble.sendAppMessage({"AMCreateCredential": token.Secret, "AMCreateCredential_ID": token.ID, "AMCreateCredential_Name": token.Name});
     }
     for (idx in to_update) {
-        var token = to_update[idx];
+        token = to_update[idx];
         Pebble.sendAppMessage({"AMUpdateCredential": [token.ID, 0, token.Name, 0]});
     }
     Pebble.sendAppMessage({"AMSetCredentialListOrder": new_ids});

@@ -1,28 +1,29 @@
 {
-  "uuid": "da96ea4e-7793-4301-9d9a-68714a902730",
-  "shortName": "PebbleAuth",
-  "longName": "Pebble Authenticator",
-  "capabilities": [ "configurable" ],
-  "companyName": "Public Domain",
-  "versionCode": 2,
-  "versionLabel": "2.0.0",
-  "watchapp": {
-    "watchface": false
-  },
-  "appKeys": {
-    "utcoffset_set": 0,
-    "AMCreateCredential": 1,
-    "AMCreateCredential_ID": 2,
-    "AMCreateCredential_Name": 3,
-    "AMDeleteCredential": 4,
-    "AMClearCredentials": 5,
-    "AMReadCredentialList": 6,
-    "AMReadCredentialList_Result": 7,
-    "AMUpdateCredential": 8,
-    "AMSetCredentialListOrder": 9
-  },
-  "resources": {
-    "media": [
-    ]
-  }
+    "versionLabel": "2.0.0",
+    "uuid": "da96ea4e-7793-4301-9d9a-68714a902730",
+    "appKeys": {
+        "AMReadCredentialList_Result": 7,
+        "AMClearCredentials": 5,
+        "AMDeleteCredential": 4,
+        "AMCreateCredential": 1,
+        "AMCreateCredential_ID": 2,
+        "AMSetCredentialListOrder": 9,
+        "AMReadCredentialList": 6,
+        "utcoffset_set": 0,
+        "AMUpdateCredential": 8,
+        "AMCreateCredential_Name": 3
+    },
+    "longName": "Pebble Authenticator",
+    "versionCode": 2,
+    "capabilities": [
+        "configurable"
+    ],
+    "shortName": "PebbleAuth",
+    "companyName": "Public Domain",
+    "watchapp": {
+        "watchface": false
+    },
+    "resources": {
+        "media": []
+    }
 }
