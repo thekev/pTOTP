@@ -20,12 +20,22 @@ $(document).ready(function(e) {
         Tokens = JSON.parse(decodeURIComponent(location.hash.substring(1)));
     }
 
-    $('.token-list').sortable({
+    $('.token-list-container').sortable({
             'tolerance': 'pointer',
             'containment': 'parent',
             'opacity': 0.6,
             update: function(event, ui) {
-
+                // Refresh the Tokens list to match
+                var newTokens = [];
+                $(".token-list-container a").each(function(){
+                    newTokens.push(TokenByID($(this).data("id")));
+                });
+                if (Tokens != newTokens) {
+                    RefreshTokenList();
+                    SetPendingWatchUpdate();
+                    Tokens = newTokens;
+                    
+                }
             }
         });
 
@@ -35,10 +45,6 @@ $(document).ready(function(e) {
 
     $("#token-new").on("pagebeforeshow", function(){
         $("#token-new input[type='text']").val("");
-    });
-
-    $("#token-list").on("pagebeforeshow", function(){
-        $("#config-save-btn").toggle(PendingWatchUpdate);
     });
 
     $("#config-save-btn").bind("click", ConfigurationSave).hide();
@@ -63,14 +69,18 @@ $(document).ready(function(e) {
     RefreshTokenList();
 });
 
+var SetPendingWatchUpdate = function(){
+    $("#config-save-btn").show()
+}
+
 var RefreshTokenList = function(){
-    $(".token-list").empty();
+    $(".token-list-container").empty();
     var has_tokens = false;
     for (var idx in Tokens) {
         var token_item = $("<li><a href=\"#token-detail\" class=\"ui-icon-gear\"></a></li>");
         $("a", token_item).data("id", Tokens[idx].ID);
         $("a", token_item).text(Tokens[idx]["Name"]).bind("click", TokenSelected);
-        $(".token-list").append(token_item).listview("refresh");
+        $(".token-list-container").append(token_item).listview("refresh");
         has_tokens = true;
     }
     $("#no-tokens-message").toggle(!has_tokens);
@@ -87,7 +97,7 @@ var TokenSaved = function(){
     }
     TokenByID(SelectedTokenID).Name = $("#token-name").val();
     RefreshTokenList();
-    PendingWatchUpdate = true;
+    SetPendingWatchUpdate();
     window.location.hash = "";
 };
 
@@ -95,7 +105,7 @@ var TokenDeleted = function(){
     if (!confirm("Are you sure?")) return;
     Tokens.splice(Tokens.indexOf(TokenByID(SelectedTokenID)), 1);
     RefreshTokenList();
-    PendingWatchUpdate = true;
+    SetPendingWatchUpdate();
     window.location.hash = "";
 };
 
@@ -110,7 +120,7 @@ var TokenCreated = function(e){
         return;
     }
     Tokens.push(token);
-    PendingWatchUpdate = true;
+    SetPendingWatchUpdate();
     RefreshTokenList();
     window.location.hash = "";
 };

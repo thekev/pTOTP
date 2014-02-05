@@ -38,7 +38,7 @@ typedef enum AMKey {
 
   AMUpdateCredential = 8, // Struct with credential info
 
-  AMCredentialListOrder = 9 // array of shorts of credential IDs
+  AMSetCredentialListOrder = 9 // array of shorts of credential IDs
 } AMKey;
 
 typedef struct KeyInfo {
@@ -70,6 +70,8 @@ TextLayer *noTokensLayer;
 MenuLayer *codeListLayer;
 
 int utcOffset;
+
+int key_list_read_index = 0;
 
 void key_list_add(KeyInfo* key) {
   KeyListNode* node = malloc(sizeof(KeyListNode));
@@ -203,8 +205,6 @@ void refresh_all(void){
 
 
 void bar_layer_update(Layer *l, GContext* ctx) {
-  //static int offset, tick;
-  //GSize sz;
   graphics_context_set_fill_color(ctx, GColorBlack);
   unsigned short slice = 30-(time(NULL)%30);
   graphics_fill_rect(ctx, GRect(0,0,(slice*48)/10,5), 0, GCornerNone);
@@ -225,7 +225,25 @@ int16_t get_cell_height(struct MenuLayer *menu_layer, MenuIndex *cell_index, voi
   return 55;
 }
 
- void in_received_handler(DictionaryIterator *received, void *context) {
+void key_list_read_iter(void) {
+  if (key_list_read_index == key_list_length()) return;
+
+  KeyInfo* key = key_by_list_index(key_list_read_index);
+  PublicKeyInfo* public = malloc(sizeof(PublicKeyInfo));
+  DictionaryIterator *iter;
+  app_message_outbox_begin(&iter);
+
+  APP_LOG(APP_LOG_LEVEL_INFO, "Listing credentials - iter %d", key_list_read_index);
+  keyinfo2publickeyinfo(key, public);
+  Tuplet record = TupletBytes(AMReadCredentialList_Result, (uint8_t*)public, sizeof(PublicKeyInfo));
+  dict_write_tuplet(iter, &record);
+  app_message_outbox_send();
+
+  key_list_read_index++;
+  free(public);
+}
+
+void in_received_handler(DictionaryIterator *received, void *context) {
   static bool delta = false;
   Tuple *utcoffset_tuple = dict_find(received, AMUTCOffsetSet);
   if (utcoffset_tuple) {
@@ -252,7 +270,6 @@ int16_t get_cell_height(struct MenuLayer *menu_layer, MenuIndex *cell_index, voi
   Tuple *update_credential = dict_find(received, AMUpdateCredential);
   if (update_credential) {
     PublicKeyInfo* public = (PublicKeyInfo*)&update_credential->value->data;
-    uint8_t* buf = update_credential->value->data;
     APP_LOG(APP_LOG_LEVEL_INFO, "Update credential %d - %s", public->id, public->name);
     publickeyinfo2keyinfo(public, key_by_id(public->id));
     delta = true;
@@ -269,33 +286,64 @@ int16_t get_cell_height(struct MenuLayer *menu_layer, MenuIndex *cell_index, voi
     key_list_add(newKey);
     APP_LOG(APP_LOG_LEVEL_INFO, "Create credential %s", secret);
     delta = true;
-   }
-   if (dict_find(received, AMReadCredentialList)) {
+  }
+  if (dict_find(received, AMReadCredentialList)) {
     APP_LOG(APP_LOG_LEVEL_INFO, "Listing credentials");
-    PublicKeyInfo* public = malloc(sizeof(PublicKeyInfo));
-    KeyListNode* node = keyList;
-    while (node) {
-      DictionaryIterator *iter;
-      app_message_outbox_begin(&iter);
-      keyinfo2publickeyinfo(node->key, public);
-      Tuplet record = TupletBytes(AMReadCredentialList_Result, (uint8_t*)public, sizeof(PublicKeyInfo));
-      dict_write_tuplet(iter, &record);
-      app_message_outbox_send();
-      node = node->next;
+    key_list_read_index = 0;
+    key_list_read_iter();
+  }
+
+  Tuple *reorder_list = dict_find(received, AMSetCredentialListOrder);
+  if (reorder_list) {
+    KeyListNode* newList = NULL;
+    KeyListNode* node = NULL;
+    KeyListNode* last = NULL;
+    int ct = key_list_length();
+    for (int i = 0; i < ct; ++i)
+    {
+      // Build a new list using the existing KeyInfos
+      node = malloc(sizeof(KeyListNode));
+      if (last) {
+        last->next = node;
+      } else {
+        newList = node;
+      }
+      node->next = NULL;
+      node->key = key_by_id(reorder_list->value->data[i]);
+      last = node;
     }
-   }
+    // Free the existing list.
+    last = NULL;
+    while (keyList) {
+      last = keyList;
+      keyList = last->next;
+      free(last);
+    }
+    keyList = newList;
+    delta = true;
+    keyListDirty = true;
+  }
 
   persistentStoreNeedsWriteback = persistentStoreNeedsWriteback || delta;
   if (delta){
     refresh_all();
   }
- }
+}
+
+void out_sent_handler(DictionaryIterator *sent, void *context) {
+  APP_LOG(APP_LOG_LEVEL_INFO, "Sent message");
+  if (dict_find(sent, AMReadCredentialList_Result)) {
+    key_list_read_iter();
+  }
+}
+
 
 // Standard app init
 
 void handle_init() {
 
   app_message_register_inbox_received(in_received_handler);
+  app_message_register_outbox_sent(out_sent_handler);
 
   const uint32_t inbound_size = 64;
   const uint32_t outbound_size = 64;

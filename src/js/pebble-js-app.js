@@ -3,9 +3,9 @@ var Tokens = [];
 Pebble.addEventListener("ready",
     function(e) {
         console.log("Hello world! - Sent from your javascript application.");
-        setTimeout(function(){Pebble.sendAppMessage( { "utcoffset_set": (new Date()).getTimezoneOffset() * -60});}, 3000);
+        Pebble.sendAppMessage( { "utcoffset_set": (new Date()).getTimezoneOffset() * -60})
         //setTimeout(function(){Pebble.sendAppMessage( { "AMClearCredentials": 0, "AMCreateCredential": "test 123", "AMCreateCredential_ID": 1, "AMCreateCredential_Name": "hey-o"});}, 3000);
-        setTimeout(function(){Pebble.sendAppMessage( { "AMReadCredentialList": 1});}, 5000);
+        setTimeout(function(){Pebble.sendAppMessage( { "AMReadCredentialList": 1});}, 100);
     }
 );
 
@@ -67,7 +67,6 @@ var ReconcileConfiguration = function(newTokens) {
             }
         }
     }
-    // Detect reordering: TODO!
 
     console.log("Creating " + JSON.stringify(to_create));
     console.log("Updating " + JSON.stringify(to_update));
@@ -84,6 +83,7 @@ var ReconcileConfiguration = function(newTokens) {
         var token = to_update[idx];
         Pebble.sendAppMessage({"AMUpdateCredential": [token.ID, 0, token.Name, 0]});
     }
+    Pebble.sendAppMessage({"AMSetCredentialListOrder": new_ids});
     Tokens = newTokens;
 };
 
