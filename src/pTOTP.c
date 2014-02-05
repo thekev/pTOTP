@@ -19,6 +19,8 @@
 #define P_KEYCOUNT    2
 #define P_KEYSTART    10000
 
+#define MAX_NAME_LENGTH 32
+
 Window *window;
 
 typedef enum AMKey {
@@ -40,7 +42,7 @@ typedef enum AMKey {
 } AMKey;
 
 typedef struct KeyInfo {
-  char name[33];
+  char name[MAX_NAME_LENGTH + 1];
   short id;
   uint8_t secret[TOTP_SECRET_SIZE];
   char code[7];
@@ -48,7 +50,7 @@ typedef struct KeyInfo {
 
 typedef struct PublicKeyInfo {
   short id;
-  char name[33];
+  char name[MAX_NAME_LENGTH + 1];
 } PublicKeyInfo;
 
 typedef struct KeyListNode {
@@ -163,12 +165,14 @@ void key_list_supplant(KeyListNode* newList) {
 
 void keyinfo2publickeyinfo(KeyInfo* key, PublicKeyInfo* public) {
   public->id = key->id;
-  strcpy(public->name, key->name);
+  strncpy(public->name, key->name, MAX_NAME_LENGTH);
+  public->name[MAX_NAME_LENGTH] = 0;
 }
 
 void publickeyinfo2keyinfo(PublicKeyInfo* public, KeyInfo* key) {
   key->id = public->id;
-  strcpy(key->name, public->name);
+  strncpy(key->name, public->name, MAX_NAME_LENGTH);
+  key->name[MAX_NAME_LENGTH] = 0;
 }
 
 void code2char(unsigned int code, char* out) {
@@ -290,7 +294,8 @@ void in_received_handler(DictionaryIterator *received, void *context) {
     KeyInfo* newKey = malloc(sizeof(KeyInfo));
     memcpy((char*)&newKey->secret, secret, TOTP_SECRET_SIZE);
     newKey->id = dict_find(received, AMCreateCredential_ID)->value->int32;
-    strcpy((char*)&newKey->name, dict_find(received, AMCreateCredential_Name)->value->cstring);
+    strncpy((char*)&newKey->name, dict_find(received, AMCreateCredential_Name)->value->cstring, MAX_NAME_LENGTH);
+    newKey->name[MAX_NAME_LENGTH] = 0;
 
     key_list_add(newKey);
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Create credential %d - %s", newKey->id, newKey->name);
