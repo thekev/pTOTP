@@ -12,3 +12,10 @@
 #new-token-secret {
 	text-transform: uppercase;
 }
+
+.info-block {
+	text-align: center;
+	margin:30px 10px;
+	opacity: 0.5;
+	font-size:70%;
+}
