@@ -18,12 +18,19 @@
     "capabilities": [
         "configurable"
     ],
-    "shortName": "PebbleAuth",
     "companyName": "Public Domain",
+    "shortName": "Authenticator",
     "watchapp": {
         "watchface": false
     },
     "resources": {
-        "media": []
+        "media": [
+          {
+            "type": "png",
+            "name": "ICON",
+            "file": "icon.png",
+            "menuIcon": true
+          }
+        ]
     }
 }
