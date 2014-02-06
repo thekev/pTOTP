@@ -1,9 +1,10 @@
 var Tokens = [];
+var TokenLoadFinished = false;
 
 Pebble.addEventListener("ready",
     function(e) {
-        QueueAppMessage({ "AMSetUTCOffset": (new Date()).getTimezoneOffset() * -60});
         QueueAppMessage({ "AMReadTokenList": 1});
+        QueueAppMessage({ "AMSetUTCOffset": (new Date()).getTimezoneOffset() * -60});
     }
 );
 
@@ -57,12 +58,23 @@ Pebble.addEventListener("appmessage",
         token.Name = UnCString(e.payload.AMReadTokenList_Result, 2);
         Tokens.push(token);
     }
+    if (e.payload.AMReadTokenList_Finished) {
+        TokenLoadFinished = true;
+    }
   }
 );
 
-Pebble.addEventListener("showConfiguration", function() {
-    Pebble.openURL("https://pebbleauth.cpfx.ca/config.html#" + encodeURIComponent(JSON.stringify(Tokens)));
-});
+var DeferredConfigOpen = function(){
+    // The docs say that this method must open a URL otherwise the user will receive an error - this doesn't appear to be the case.
+    // And that's super handy for cases like this.
+    if (TokenLoadFinished) {
+        Pebble.openURL("https://pebbleauth.cpfx.ca/config.html#" + encodeURIComponent(JSON.stringify(Tokens)));
+    } else {
+        setTimeout(DeferredConfigOpen, 100);
+    }
+};
+
+Pebble.addEventListener("showConfiguration", DeferredConfigOpen);
 
 var ReconcileConfiguration = function(newTokens) {
     var existing_ids = [];

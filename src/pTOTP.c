@@ -44,10 +44,11 @@ typedef enum AMKey {
 
   AMReadTokenList = 6, // Starts token list read
   AMReadTokenList_Result = 7, // Struct with token info, returned in order of the list
+  AMReadTokenList_Finished = 8, // Included in the last AMReadTokenList_Result message
 
-  AMUpdateToken = 8, // Struct with token info
+  AMUpdateToken = 9, // Struct with token info
 
-  AMSetTokenListOrder = 9 // array of shorts of token IDs
+  AMSetTokenListOrder = 10 // array of shorts of token IDs
 } AMKey;
 
 typedef struct TokenInfo {
@@ -249,17 +250,30 @@ int16_t get_cell_height(struct MenuLayer *menu_layer, MenuIndex *cell_index, voi
   return 55;
 }
 
-void token_list_retrieve_iter(void) {
-  if (token_list_retrieve_index == token_list_length()) return;
+void token_list_retrieve_iter() {
+  DictionaryIterator *iter;
+  if (token_list_retrieve_index == token_list_length()) {
+    if (token_list_retrieve_index == 0){
+      // We have to send the AMReadTokenList_Finished message by its own, otherwise the configuration screen will block forever waiting for tokens that will never arrive.
+      app_message_outbox_begin(&iter);
+      dict_write_tuplet(iter, &TupletInteger(AMReadTokenList_Finished, 1));
+      app_message_outbox_send();
+    }
+    return;
+  }
 
   TokenInfo* key = token_by_list_index(token_list_retrieve_index);
   PublicTokenInfo* public = malloc(sizeof(PublicTokenInfo));
-  DictionaryIterator *iter;
   app_message_outbox_begin(&iter);
 
   tokeninfo2publicinfo(key, public);
   Tuplet record = TupletBytes(AMReadTokenList_Result, (uint8_t*)public, sizeof(PublicTokenInfo));
   dict_write_tuplet(iter, &record);
+
+  if (token_list_retrieve_index + 1 == token_list_length()) {
+    dict_write_tuplet(iter, &TupletInteger(AMReadTokenList_Finished, 1));
+  }
+
   app_message_outbox_send();
 
   token_list_retrieve_index++;

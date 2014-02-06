@@ -10,8 +10,9 @@
         "AMClearTokens": 5,
         "AMReadTokenList": 6,
         "AMReadTokenList_Result": 7,
-        "AMUpdateToken": 8,
-        "AMSetTokenListOrder": 9
+        "AMReadTokenList_Finished": 8,
+        "AMUpdateToken": 9,
+        "AMSetTokenListOrder": 10
     },
     "longName": "Pebble Authenticator",
     "versionCode": 1,
