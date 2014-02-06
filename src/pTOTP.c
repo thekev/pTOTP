@@ -17,11 +17,20 @@
 
 #define P_UTCOFFSET       1
 #define P_TOKENS_COUNT    2
+#define P_SELECTED_LIST_INDEX    3
 #define P_TOKENS_START    10000
 
 #define MAX_NAME_LENGTH   32
 
 Window *window;
+
+typedef enum PersistenceWritebackFlags {
+  PWNone = 0,
+  PWUTCOffset = 1,
+  PWTokens = 1 << 1
+} PersistenceWritebackFlags;
+
+PersistenceWritebackFlags persist_writeback = PWNone;
 
 typedef enum AMKey {
   AMSetUTCOffset = 0, // Int32 with offset
@@ -60,7 +69,6 @@ typedef struct TokenListNode {
 
 TokenListNode* token_list = NULL;
 bool key_list_is_dirty = false;
-bool persistent_store_needs_writeback = false;
 
 Layer *bar_layer;
 
@@ -71,6 +79,8 @@ MenuLayer *code_list_layer;
 int utc_offset;
 
 int token_list_retrieve_index = 0;
+
+int startup_selected_list_index = 0;
 
 void token_list_add(TokenInfo* key) {
   TokenListNode* node = malloc(sizeof(TokenListNode));
@@ -260,7 +270,11 @@ void in_received_handler(DictionaryIterator *received, void *context) {
   static bool delta = false;
   Tuple *utcoffset_tuple = dict_find(received, AMSetUTCOffset);
   if (utcoffset_tuple) {
-    delta = utc_offset != utcoffset_tuple->value->int32;
+    if (utc_offset != utcoffset_tuple->value->int32){
+      delta = true;
+      persist_writeback |= PWUTCOffset;
+    }
+
     utc_offset = utcoffset_tuple->value->int32;
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Set TZ offset %d", utc_offset);
    }
@@ -268,6 +282,8 @@ void in_received_handler(DictionaryIterator *received, void *context) {
   if (dict_find(received, AMClearTokens)) {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Clear tokens");
     token_list_clear();
+
+    persist_writeback |= PWTokens;
     delta = true;
   }
 
@@ -277,6 +293,8 @@ void in_received_handler(DictionaryIterator *received, void *context) {
     TokenInfo* key = token_by_id(delete_token->value->int8);
     token_list_delete(key);
     free(key);
+
+    persist_writeback |= PWTokens;
     delta = true;
   }
 
@@ -285,6 +303,8 @@ void in_received_handler(DictionaryIterator *received, void *context) {
     PublicTokenInfo* public = (PublicTokenInfo*)&update_token->value->data;
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Update token %d - %s", public->id, public->name);
     publicinfo2tokeninfo(public, token_by_id(public->id));
+
+    persist_writeback |= PWTokens;
     delta = true;
   }
 
@@ -299,6 +319,8 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 
     token_list_add(newKey);
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Create token %d - %s", newKey->id, newKey->name);
+
+    persist_writeback |= PWTokens;
     delta = true;
   }
 
@@ -333,10 +355,10 @@ void in_received_handler(DictionaryIterator *received, void *context) {
     // Free the existing list and replace.
     token_list_supplant(newList);
 
+    persist_writeback |= PWTokens;
     delta = true;
   }
 
-  persistent_store_needs_writeback = persistent_store_needs_writeback || delta;
   if (delta){
     refresh_all();
   }
@@ -394,11 +416,22 @@ void handle_init() {
     .get_num_rows = num_code_rows,
     .get_cell_height = get_cell_height
   };
+
   menu_layer_set_callbacks(code_list_layer, NULL, menuCallbacks);
+
 
   menu_layer_set_click_config_onto_window(code_list_layer, window);
 
+
   layer_add_child(rootLayer, (Layer*)code_list_layer);
+
+  // Ideally we'd set this before we register the callbacks, so we wouldn't catch the change event should it be called.
+  if (persist_exists(P_SELECTED_LIST_INDEX)) {
+    MenuIndex index = {.row = persist_read_int(P_SELECTED_LIST_INDEX), .section=0};
+    startup_selected_list_index = index.row;
+    menu_layer_set_selected_index(code_list_layer, index, MenuRowAlignCenter, false);
+  }
+
 
   refresh_all();
 }
@@ -409,9 +442,17 @@ void handle_tick(struct tm* tick_time, TimeUnits units_changed) {
 }
 
 void handle_deinit() {
-  if (persistent_store_needs_writeback) {
+  if ((persist_writeback & PWUTCOffset) == PWUTCOffset) {
     // Write back persistent things
     persist_write_int(P_UTCOFFSET, utc_offset);
+  }
+
+  if (startup_selected_list_index != menu_layer_get_selected_index(code_list_layer).row) {
+    persist_write_int(P_SELECTED_LIST_INDEX, menu_layer_get_selected_index(code_list_layer).row);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Wrote list index");
+  }
+
+  if ((persist_writeback & PWTokens) == PWTokens) {
     persist_write_int(P_TOKENS_COUNT, token_list_length());
 
     TokenListNode* node = token_list;
