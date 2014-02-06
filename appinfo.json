@@ -1,5 +1,5 @@
 {
-    "versionLabel": "1.0.0",
+    "versionLabel": "1.0.1",
     "uuid": "da96ea4e-7793-4301-9d9a-68714a902730",
     "appKeys": {
         "AMSetUTCOffset": 0,
@@ -15,7 +15,7 @@
         "AMSetTokenListOrder": 10
     },
     "longName": "Pebble Authenticator",
-    "versionCode": 1,
+    "versionCode": 2,
     "capabilities": [
         "configurable"
     ],
