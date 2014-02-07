@@ -69,6 +69,11 @@ $(document).ready(function(e) {
         }
     });
 
+    $('#file_input').bind('change', HandleFileSelect);
+    $('#qrscanner').bind('click', function(){
+        $('#file_input').click();
+    })
+
     RefreshTokenList();
 });
 
@@ -178,3 +183,52 @@ var base32_decode = function(input) {
     }
     return result;
 };
+
+var HandleFileSelect = function(evt) {
+ var files = evt.target.files; // FileList object
+ var $tokenInput = $('#new-token-key');
+ var placeholderVal = $tokenInput.attr('placeholder');
+
+ $tokenInput.attr('placeholder', "Decoding QR Code...");
+
+ // files is a FileList of File objects. List some properties.
+ var output = [];
+ for (var i = 0, f; f = files[i]; i++) {
+   var reader = new FileReader();
+   reader.onload = (function(theFile) {
+     return function(e) {
+       var c = document.createElement("canvas");
+       c.width = screen.width;
+       c.height = screen.height;
+       var ctx = c.getContext('2d');
+       
+       var img = new Image();
+       img.onload = function () {
+         ctx.drawImage(img, 0, 0, screen.width, img.height * (screen.width/img.width));
+         qrcode.decode(c.toDataURL("image/png"));
+         qrcode.callback = function(data){
+           var parameters, secret="";
+           try{
+               parameters = data.split('?')[1].split('&');
+               parameters.forEach(function(parameter){
+                   var parts = parameter.split('=');
+                   if(parts[0]=="secret"){
+                       secret = parts[1];
+                   }
+               });
+               $tokenInput.val(secret);
+           }
+           catch(e){
+               $tokenInput.attr('placeholder', placeholderVal);
+               alert("Error decoding QR Code.\n\nPlease try again.");
+           }
+         }
+       }
+       img.src = e.target.result;
+     };
+   })(f);
+
+   // Read in the image file as a data URL.
+   reader.readAsDataURL(f);
+ }
+}
