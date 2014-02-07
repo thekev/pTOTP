@@ -209,13 +209,7 @@ var HandleFileSelect = function(evt) {
          qrcode.callback = function(data){
            var parameters, secret="";
            try{
-               parameters = data.split('?')[1].split('&');
-               parameters.forEach(function(parameter){
-                   var parts = parameter.split('=');
-                   if(parts[0]=="secret"){
-                       secret = parts[1];
-                   }
-               });
+               secret = data.match(/^otpauth\:\/\/.*\?.*secret\=([0-9a-z]{16}})/i)[1];
                $tokenInput.val(secret);
            }
            catch(e){
