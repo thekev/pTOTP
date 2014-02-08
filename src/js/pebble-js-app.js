@@ -68,7 +68,7 @@ var DeferredConfigOpen = function(){
     // The docs say that this method must open a URL otherwise the user will receive an error - this doesn't appear to be the case.
     // And that's super handy for cases like this.
     if (TokenLoadFinished) {
-        Pebble.openURL("https://pebbleauth.cpfx.ca/config.html#" + encodeURIComponent(JSON.stringify(Tokens)));
+        Pebble.openURL("https://pebbleauth.cpfx.ca/config.html?ver=1.1.0#" + encodeURIComponent(JSON.stringify(Tokens)));
     } else {
         setTimeout(DeferredConfigOpen, 100);
     }
