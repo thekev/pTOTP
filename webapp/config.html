@@ -7,6 +7,7 @@
         <script src="js/jquery.mobile-1.4.0.min.js"></script>
         <script src="js/jquery-ui-1.10.4.custom.min.js"></script>
         <script src="js/jquery.ui.touch-punch.min.js"></script>
+        <script src="js/llqrcode.js"></script>
         <script src="js/config.js"></script>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     </head>
@@ -57,8 +58,17 @@
                 <div data-role="content">
                     <label for="new-token-name">Name</label>
                     <input type="text" name="new-token-name" id="new-token-name" placeholder="johan@gmail.com" required maxlength="32"/>
+                    <svg id="qrscanner" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+                         width="512px" height="512px" viewBox="0 0 512 512" enable-background="new 0 0 512 512" xml:space="preserve">
+                    <path id="barcode-3-icon" fill-rule="evenodd" clip-rule="evenodd" d="M50,208.493V111.45h106v37H87v60.043H50z M356,111.45h106
+                        v97.043h-37V148.45h-69V111.45z M462,303.507v97.043H356v-37h69v-60.043H462z M156,400.55H50v-97.043h37v60.043h69V400.55z
+                         M117,331.114V181.956h23.215v149.158H117z M162.318,331.114V181.956h27.75v149.158H162.318z M211.979,331.114V181.956h13.611
+                        v149.16L211.979,331.114z M297.614,331.114V181.956h13.61v149.16L297.614,331.114z M247.827,331.114l-0.001-149.158h27.749v149.16
+                        L247.827,331.114z M333.566,331.114v-149.16h23.217v149.16H333.566z M377.978,331.114v-149.16L395,181.956v149.158H377.978z"/>
+                    </svg>
                     <label for="new-token-key">Key</label>
                     <input type="text" name="new-token-key" value="" id="new-token-key" placeholder="2XC2E64AAG0T23AR" maxlength="48" required autocapitalize="off" autocorrect="off" autocomplete="off"/>
+                    <input id="file_input" type="file" accept="image/*" capture>
                 </div>
                 <a class="ui-btn ui-icon-check ui-btn-icon-right" id="token-create-btn">Create Token</a>
         </div>

@@ -12,10 +12,25 @@
 #new-token-key {
 	text-transform: uppercase;
 }
+#token-new .ui-input-text:nth-child(4) {
+	margin-right: 45px;
+}
 
 .info-block {
 	text-align: center;
 	margin:30px 10px;
 	opacity: 0.5;
 	font-size:70%;
+}
+
+#qrscanner{
+	width: 40px;
+	height: 30px;
+	float: right;
+	top: 31px;
+	position: relative;
+	cursor: pointer;
+}
+#file_input{
+	display: none;
 }
