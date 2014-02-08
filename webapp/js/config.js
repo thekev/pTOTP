@@ -192,44 +192,45 @@ var base32_decode = function(input) {
 };
 
 var HandleFileSelect = function(evt) {
- var files = evt.target.files; // FileList object
- var $tokenInput = $('#new-token-key');
- var placeholderVal = $tokenInput.attr('placeholder');
+    var files = evt.target.files; // FileList object
+    var $tokenInput = $('#new-token-key');
+    var placeholderVal = $tokenInput.attr('placeholder');
 
- $tokenInput.attr('placeholder', "Decoding QR Code...");
+    $tokenInput.attr('placeholder', "Decoding QR Code...");
 
- // files is a FileList of File objects. List some properties.
- var output = [];
- for (var i = 0, f; f = files[i]; i++) {
-   var reader = new FileReader();
-   reader.onload = (function(theFile) {
-     return function(e) {
-       var c = document.createElement("canvas");
-       c.width = screen.width;
-       c.height = screen.height;
-       var ctx = c.getContext('2d');
-       
-       var img = new Image();
-       img.onload = function () {
-         ctx.drawImage(img, 0, 0, screen.width, img.height * (screen.width/img.width));
-         qrcode.decode(c.toDataURL("image/png"));
-         qrcode.callback = function(data){
-           var parameters, secret="";
-           try{
-               secret = data.match(/^otpauth\:\/\/.*\?.*secret\=([0-9a-z]{32}|[0-9a-z]{16})/i)[1];
-               $tokenInput.val(secret);
-           }
-           catch(e){
-               $tokenInput.attr('placeholder', placeholderVal);
-               alert("Error decoding QR Code.\n\nPlease try again.");
-           }
-         }
-       }
-       img.src = e.target.result;
-     };
-   })(f);
+    // files is a FileList of File objects. List some properties.
+    var output = [];
+    for (var i = 0, f; f = files[i]; i++) {
+    var reader = new FileReader();
+    reader.onload = (function(theFile) {
+        return function(e) {
+            var c = document.createElement("canvas");
+            c.width = 1024;
+            c.height = 1024;
+            var ctx = c.getContext('2d');
+            var img = new Image();
+            img.onload = function() {
+                // Resize to more reasonable proportions.
+                ctx.drawImage(img, 0, 0, c.width, img.height * (c.width/img.width));
+                qrcode.decode(c.toDataURL("image/png"));
+                qrcode.callback = function(data){
+                    var secret="";
+                    try{
+                        secret = data.match(/^otpauth\:\/\/.*\?.*secret\=([0-9a-zA-Z]+)/i)[1];
+                        $tokenInput.val(secret);
+                    }
+                    catch(e) {
+                        alert("Error decoding QR Code. Please try again!");
+                    } finally {
+                        $tokenInput.attr('placeholder', placeholderVal);
+                    }
+                };
+            };
+            img.src = e.target.result;
+        };
+    })(f);
 
-   // Read in the image file as a data URL.
-   reader.readAsDataURL(f);
- }
-}
+    // Read in the image file as a data URL.
+    reader.readAsDataURL(f);
+    }
+};
