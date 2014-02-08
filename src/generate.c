@@ -41,7 +41,7 @@
 
 #define VERIFICATION_CODE_MODULUS (1000*1000) // Six digits
 
-int generateCode(const uint8_t *secret, unsigned long tm) {
+int generateCode(const uint8_t *secret, const uint8_t secret_length, unsigned long tm) {
   uint8_t challenge[8];
   for (int i = 8; i--; tm >>= 8) {
     challenge[i] = tm;
@@ -49,7 +49,7 @@ int generateCode(const uint8_t *secret, unsigned long tm) {
 
   // Compute the HMAC_SHA1 of the secrete and the challenge.
   uint8_t hash[SHA1_DIGEST_LENGTH];
-  hmac_sha1(secret, TOTP_SECRET_SIZE, challenge, 8, hash, SHA1_DIGEST_LENGTH);
+  hmac_sha1(secret, secret_length, challenge, 8, hash, SHA1_DIGEST_LENGTH);
 
   // Pick the offset where to sample our hash value for the actual verification
   // code.

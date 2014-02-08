@@ -19,6 +19,7 @@
 #define P_TOKENS_COUNT    2
 #define P_SELECTED_LIST_INDEX    3
 #define P_TOKENS_START    10000
+#define P_SECRETS_START	  20000
 
 #define MAX_NAME_LENGTH   32
 
@@ -27,7 +28,8 @@ Window *window;
 typedef enum PersistenceWritebackFlags {
   PWNone = 0,
   PWUTCOffset = 1,
-  PWTokens = 1 << 1
+  PWTokens = 1 << 1,
+  PWSecrets = 1 << 2
 } PersistenceWritebackFlags;
 
 PersistenceWritebackFlags persist_writeback = PWNone;
@@ -54,7 +56,8 @@ typedef enum AMKey {
 typedef struct TokenInfo {
   char name[MAX_NAME_LENGTH + 1];
   short id;
-  uint8_t secret[TOTP_SECRET_SIZE];
+  uint8_t secret_length; // Since persistence is limited to this size anyways.
+  uint8_t* secret;
   char code[7];
 } TokenInfo;
 
@@ -135,6 +138,7 @@ void token_list_clear(void){
   while (token_list) {
     temp = token_list;
     token_list = temp->next;
+	free(temp->key->secret);
     free(temp->key); // Since it'd be a pain to do this otherwise.
     free(temp);
   }
@@ -217,7 +221,7 @@ void refresh_all(void){
 
   TokenListNode* keyNode = token_list;
   while (keyNode) {
-    unsigned int code = generateCode(keyNode->key->secret, quantized_time);
+    unsigned int code = generateCode(keyNode->key->secret, keyNode->key->secret_length, quantized_time);
     code2char(code, (char*)&keyNode->key->code);
     keyNode = keyNode->next;
     hasKeys = true;
@@ -305,6 +309,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
   if (delete_token) {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Delete token %d", delete_token->value->int8);
     TokenInfo* key = token_by_id(delete_token->value->int8);
+	persist_delete(P_SECRETS_START + key->id); // Ensure the secret gets deleted.
     token_list_delete(key);
     free(key);
 
@@ -315,7 +320,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
   Tuple *update_token = dict_find(received, AMUpdateToken);
   if (update_token) {
     PublicTokenInfo* public = (PublicTokenInfo*)&update_token->value->data;
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Update token %d - %s", public->id, public->name);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Update token %d", public->id);
     publicinfo2tokeninfo(public, token_by_id(public->id));
 
     persist_writeback |= PWTokens;
@@ -326,15 +331,17 @@ void in_received_handler(DictionaryIterator *received, void *context) {
   if (create_token) {
     uint8_t* secret = create_token->value->data;
     TokenInfo* newKey = malloc(sizeof(TokenInfo));
-    memcpy((char*)&newKey->secret, secret, TOTP_SECRET_SIZE);
+	newKey->secret_length = secret[0]; // First byte is secret length
+	newKey->secret = malloc(newKey->secret_length);
+    memcpy(newKey->secret, secret + 1, newKey->secret_length); // While the rest is the key itself
     newKey->id = dict_find(received, AMCreateToken_ID)->value->int32;
     strncpy((char*)&newKey->name, dict_find(received, AMCreateToken_Name)->value->cstring, MAX_NAME_LENGTH);
     newKey->name[MAX_NAME_LENGTH] = 0;
 
     token_list_add(newKey);
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Create token %d - %s", newKey->id, newKey->name);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Create token %d", newKey->id);
 
-    persist_writeback |= PWTokens;
+	persist_writeback |= PWTokens | PWSecrets;
     delta = true;
   }
 
@@ -399,10 +406,12 @@ void handle_init() {
   utc_offset = persist_exists(P_UTCOFFSET) ? persist_read_int(P_UTCOFFSET) : 0;
   if (persist_exists(P_TOKENS_COUNT)) {
     int ct = persist_read_int(P_TOKENS_COUNT);
-    APP_LOG(APP_LOG_LEVEL_INFO, "Starting with %d tokens", ct);
+    APP_LOG(APP_LOG_LEVEL_INFO, "Starting with %d tokens & secrets", ct);
     for (int i = 0; i < ct; ++i) {
       TokenInfo* key = malloc(sizeof(TokenInfo));
       persist_read_data(P_TOKENS_START + i, key, sizeof(TokenInfo));
+	  key->secret = malloc(key->secret_length);
+	  persist_read_data(P_SECRETS_START + key->id, key->secret, key->secret_length);
       token_list_add(key);
     }
   }
@@ -478,6 +487,17 @@ void handle_deinit() {
     }
 
     APP_LOG(APP_LOG_LEVEL_INFO, "Wrote %d tokens", idx);
+  }
+	
+  // This is stored in a seperate storage area keyed by ID because a) it's easier to have truly variable-length secrets this way, and b) it's easier to ensure secrets are deleted (as opposed to relying on them getting overwritten)
+  if ((persist_writeback & PWSecrets) == PWSecrets) {
+    TokenListNode* node = token_list;
+    while (node) {
+      persist_write_data(P_SECRETS_START + node->key->id, node->key->secret, node->key->secret_length);
+      node = node->next;
+    }
+
+    APP_LOG(APP_LOG_LEVEL_INFO, "Wrote secrets");
   }
 
   token_list_clear();

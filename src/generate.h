@@ -36,6 +36,4 @@
 
 #include "pebble.h"
 
-#define TOTP_SECRET_SIZE 10
-
-int generateCode(const uint8_t *key, unsigned long tm);
+int generateCode(const uint8_t *key, const uint8_t key_length, unsigned long tm);

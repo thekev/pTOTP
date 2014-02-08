@@ -112,7 +112,9 @@ var ReconcileConfiguration = function(newTokens) {
     }
     for (idx in to_create) {
         token = to_create[idx];
-        QueueAppMessage({"AMCreateToken": ToByteArray(atob(token.Secret)), "AMCreateToken_ID": token.ID, "AMCreateToken_Name": token.Name});
+		var secretArray = ToByteArray(atob(token.Secret));
+		secretArray.unshift(secretArray.length);
+        QueueAppMessage({"AMCreateToken": secretArray, "AMCreateToken_ID": token.ID, "AMCreateToken_Name": token.Name});
     }
     for (idx in to_update) {
         token = to_update[idx];
