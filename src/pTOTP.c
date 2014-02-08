@@ -19,7 +19,7 @@
 #define P_TOKENS_COUNT    2
 #define P_SELECTED_LIST_INDEX    3
 #define P_TOKENS_START    10000
-#define P_SECRETS_START	  20000
+#define P_SECRETS_START   20000
 
 #define MAX_NAME_LENGTH   32
 
@@ -138,7 +138,7 @@ void token_list_clear(void){
   while (token_list) {
     temp = token_list;
     token_list = temp->next;
-	free(temp->key->secret);
+    free(temp->key->secret);
     free(temp->key); // Since it'd be a pain to do this otherwise.
     free(temp);
   }
@@ -156,7 +156,7 @@ bool token_list_delete(TokenInfo* key){
     if (last) {
       last->next = node->next;
     } else {
-      token_list = NULL;
+      token_list = node->next;
     }
     free(node);
     key_list_is_dirty = true;
@@ -309,8 +309,9 @@ void in_received_handler(DictionaryIterator *received, void *context) {
   if (delete_token) {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Delete token %d", delete_token->value->int8);
     TokenInfo* key = token_by_id(delete_token->value->int8);
-	persist_delete(P_SECRETS_START + key->id); // Ensure the secret gets deleted.
+    persist_delete(P_SECRETS_START + key->id); // Ensure the secret gets deleted.
     token_list_delete(key);
+    free(key->secret);
     free(key);
 
     persist_writeback |= PWTokens;
@@ -331,8 +332,8 @@ void in_received_handler(DictionaryIterator *received, void *context) {
   if (create_token) {
     uint8_t* secret = create_token->value->data;
     TokenInfo* newKey = malloc(sizeof(TokenInfo));
-	newKey->secret_length = secret[0]; // First byte is secret length
-	newKey->secret = malloc(newKey->secret_length);
+  newKey->secret_length = secret[0]; // First byte is secret length
+  newKey->secret = malloc(newKey->secret_length);
     memcpy(newKey->secret, secret + 1, newKey->secret_length); // While the rest is the key itself
     newKey->id = dict_find(received, AMCreateToken_ID)->value->int32;
     strncpy((char*)&newKey->name, dict_find(received, AMCreateToken_Name)->value->cstring, MAX_NAME_LENGTH);
@@ -341,7 +342,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
     token_list_add(newKey);
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Create token %d", newKey->id);
 
-	persist_writeback |= PWTokens | PWSecrets;
+  persist_writeback |= PWTokens | PWSecrets;
     delta = true;
   }
 
@@ -410,8 +411,8 @@ void handle_init() {
     for (int i = 0; i < ct; ++i) {
       TokenInfo* key = malloc(sizeof(TokenInfo));
       persist_read_data(P_TOKENS_START + i, key, sizeof(TokenInfo));
-	  key->secret = malloc(key->secret_length);
-	  persist_read_data(P_SECRETS_START + key->id, key->secret, key->secret_length);
+    key->secret = malloc(key->secret_length);
+    persist_read_data(P_SECRETS_START + key->id, key->secret, key->secret_length);
       token_list_add(key);
     }
   }
@@ -488,7 +489,7 @@ void handle_deinit() {
 
     APP_LOG(APP_LOG_LEVEL_INFO, "Wrote %d tokens", idx);
   }
-	
+
   // This is stored in a seperate storage area keyed by ID because a) it's easier to have truly variable-length secrets this way, and b) it's easier to ensure secrets are deleted (as opposed to relying on them getting overwritten)
   if ((persist_writeback & PWSecrets) == PWSecrets) {
     TokenListNode* node = token_list;
