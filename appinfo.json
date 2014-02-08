@@ -2,35 +2,35 @@
     "versionLabel": "1.0.1",
     "uuid": "da96ea4e-7793-4301-9d9a-68714a902730",
     "appKeys": {
-        "AMReadTokenList_Finished": 8,
-        "AMCreateToken": 1,
-        "AMReadTokenList_Result": 7,
         "AMSetUTCOffset": 0,
-        "AMDeleteToken": 4,
-        "AMUpdateToken": 9,
-        "AMClearTokens": 5,
-        "AMSetTokenListOrder": 10,
-        "AMReadTokenList": 6,
+        "AMCreateToken": 1,
         "AMCreateToken_ID": 2,
-        "AMCreateToken_Name": 3
+        "AMCreateToken_Name": 3,
+        "AMDeleteToken": 4,
+        "AMClearTokens": 5,
+        "AMReadTokenList": 6,
+        "AMReadTokenList_Result": 7,
+        "AMReadTokenList_Finished": 8,
+        "AMUpdateToken": 9,
+        "AMSetTokenListOrder": 10
     },
     "longName": "Pebble Authenticator",
     "versionCode": 2,
     "capabilities": [
         "configurable"
     ],
-    "shortName": "Authenticator",
     "companyName": "Public Domain",
+    "shortName": "Authenticator",
     "watchapp": {
         "watchface": false
     },
     "resources": {
         "media": [
             {
-                "menuIcon": true,
                 "type": "png",
                 "name": "ICON",
-                "file": "images/icon.png"
+            "file": "icon.png",
+            "menuIcon": true
             }
         ]
     }
