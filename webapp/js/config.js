@@ -24,6 +24,13 @@ $(document).ready(function(e) {
         }
     }
 
+    // This is pretty terrible...
+    if (!window.location.href.match(/v=1\.1\.0/)) {
+        alert("You're running an old verison of Pebble Authenticator - please update!");
+        ConfigurationSave();
+        return;
+    }
+
     $('.token-list-container').sortable({
             'tolerance': 'pointer',
             'containment': 'parent',
