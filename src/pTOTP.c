@@ -399,10 +399,7 @@ void handle_init() {
   app_message_register_inbox_received(in_received_handler);
   app_message_register_outbox_sent(out_sent_handler);
 
-  const uint32_t inbound_size = 64;
-  const uint32_t outbound_size = 64;
-  app_message_open(inbound_size, outbound_size);
-
+  app_message_open(app_message_inbox_size_maximum(), app_message_outbox_size_maximum());
   // Load persisted data
   utc_offset = persist_exists(P_UTCOFFSET) ? persist_read_int(P_UTCOFFSET) : 0;
   if (persist_exists(P_TOKENS_COUNT)) {
